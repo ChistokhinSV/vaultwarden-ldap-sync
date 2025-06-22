@@ -1,0 +1,55 @@
+dn: dc=domain,dc=local
+objectClass: top
+objectClass: domain
+dc: domain
+description: Root domain
+
+# Accounts OU
+
+dn: cn=accounts,dc=domain,dc=local
+objectClass: organizationalunit
+cn: accounts
+
+dn: cn=users,cn=accounts,dc=domain,dc=local
+objectClass: organizationalunit
+cn: users
+
+# Users
+
+dn: uid=user,cn=users,cn=accounts,dc=domain,dc=local
+objectClass: inetOrgPerson
+uid: user
+sn: User
+cn: User
+mail: user@domain.local
+userPassword: vaultwarden
+
+# memberOf will be set by group membership
+
+dn: uid=user2,cn=users,cn=accounts,dc=domain,dc=local
+objectClass: inetOrgPerson
+uid: user2
+sn: User2
+cn: User Two
+mail: user2@domain.local
+userPassword: vaultwarden2
+
+dn: uid=user3,cn=users,cn=accounts,dc=domain,dc=local
+objectClass: inetOrgPerson
+uid: user3
+sn: User3
+cn: User Three
+mail: user3@domain.local
+userPassword: vaultwarden3
+
+# Groups
+
+dn: cn=groups,cn=accounts,dc=domain,dc=local
+objectClass: organizationalunit
+cn: groups
+
+dn: cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local
+objectClass: groupOfNames
+cn: vaultwarden-users
+member: uid=user,cn=users,cn=accounts,dc=domain,dc=local
+member: uid=user2,cn=users,cn=accounts,dc=domain,dc=local

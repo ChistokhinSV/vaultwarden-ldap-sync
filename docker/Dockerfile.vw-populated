@@ -1,0 +1,15 @@
+# Pre-populated VaultWarden image for CI/CD and testing
+FROM vaultwarden/server:latest
+
+# Copy the pre-seeded database into the image
+COPY ./data/db-backup.sqlite3 /data/db.sqlite3
+
+# Set environment variables for admin token and signups allowed
+ENV ADMIN_TOKEN='$argon2id$v=19$m=65540,t=3,p=4$feGEx6pnYAk48r0C9gAhcRLEksQxZ09dZxlxpKz735I$9O66H64jds3g2fRxJTmazL7Kj0BPvaQ+0UVHsChJqJI'
+ENV SIGNUPS_ALLOWED=true
+ENV I_REALLY_WANT_VOLATILE_STORAGE=true
+
+# Expose default ports
+EXPOSE 80 3012
+
+# Entrypoint and CMD are inherited from the base image
