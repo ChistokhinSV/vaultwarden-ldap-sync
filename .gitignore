@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+# Local environment files
+.env
 # C extensions
 *.so
 # Distribution / packaging
@@ -71,3 +73,5 @@ poetry.lock
 .pytype/
 # Cython debug symbols
 cython_debug/
+# Virtual environment
+.venv
