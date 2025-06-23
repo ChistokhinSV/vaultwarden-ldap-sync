@@ -23,12 +23,16 @@ def _setup_logging() -> logging.Logger:
 
     debug = os.getenv("DEBUG", "").upper() in YES_VALUES
 
-    # Clear any existing handlers (e.g. those added by libraries) to avoid duplicates
-    root_logger = logging.getLogger()
-    for h in list(root_logger.handlers):
-        root_logger.removeHandler(h)
-
-    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    # Configure only the application logger, not the root logger
+    app_logger = logging.getLogger("vaultwarden_ldap_sync")
+    app_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    
+    # Prevent propagation to the root logger to avoid affecting other modules
+    app_logger.propagate = False
+    
+    # Clear any existing handlers to avoid duplicate logs
+    for h in list(app_logger.handlers):
+        app_logger.removeHandler(h)
 
     formatter = logging.Formatter(
         fmt="[%(asctime)s] [%(levelname)s] %(message)s",
@@ -38,10 +42,9 @@ def _setup_logging() -> logging.Logger:
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
     console_handler.setFormatter(formatter)
-    root_logger.addHandler(console_handler)
+    app_logger.addHandler(console_handler)
 
-    # Application logger inherits the root handler – return it for convenience
-    return logging.getLogger("vaultwarden_ldap_sync")
+    return app_logger
 
 logger = _setup_logging()
 

@@ -18,7 +18,7 @@ For CI or smoke testing set `RUN_ONCE=1`; the container will run a single sync c
 2. `docker compose -f docker-compose.ldap-sync.yml up --build`.
 3. Watch logs; after every `SYNC_INTERVAL` seconds a new sync cycle starts.
 
-**Skip the build:** a pre-built image is available on Docker Hub – `chistokhinsv/vaultwarden-ldap-sync:latest`.  Pull it with:
+**Skip the build:** a pre-built image is available on Docker Hub – [chistokhinsv/vaultwarden-ldap-sync](https://hub.docker.com/r/chistokhinsv/vaultwarden-ldap-sync). Pull it with:
 
 ```bash
 docker pull chistokhinsv/vaultwarden-ldap-sync:latest
@@ -54,6 +54,17 @@ docker pull chistokhinsv/vaultwarden-ldap-sync:latest
 | `LDAP_USERS_ONLY` | `false` | Revoke VaultWarden users not found in LDAP. |
 | `IGNORE_LDAPS_CERT` | `false` | Ignore invalid LDAPS cert. |
 | `LDAP_CA_FILE` | — | Custom CA bundle file path. |
+
+---
+
+### User Disable/Revoke & `LDAP_USERS_ONLY` Behaviour
+
+During each sync cycle, the application checks the status of users both in LDAP and Vaultwarden:
+- **Disabled in LDAP:** If a user is found to be disabled in LDAP (according to the configured attribute and values), their access in Vaultwarden will be revoked.
+- **Re-enabled in LDAP:** If a previously disabled Vaultwarden user becomes enabled in LDAP again, their access will be restored in Vaultwarden.
+- **LDAP_USERS_ONLY:** When this variable is set to `true`, any users present in Vaultwarden but not found as active in LDAP will be revoked automatically. This ensures that only users managed by LDAP retain access.
+
+This approach guarantees that Vaultwarden access is always consistent with the authoritative LDAP directory, supporting both revocation and restoration of users as their status changes in LDAP.
 | **Safety** |||
 | `PREVENT_SELF_LOCK` | `true` | Never revoke the account whose client id/secret is used for sync. |
 
