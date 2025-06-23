@@ -5,7 +5,7 @@
 Copy the backup database to the Docker build context:
 
 ```sh
-cp /var/lib/docker/volumes/org_invite_vaultwarden_data/_data/db-backup.sqlite3 ./docker/db.sqlite3
+cp /var/lib/docker/volumes/ldap_sync_vaultwarden_data/_data/db-backup.sqlite3 ./docker/db.sqlite3
 ```
 
 ## 2. Build the Docker Image

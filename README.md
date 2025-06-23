@@ -67,7 +67,7 @@ services:
     env_file:
       - .env
     depends_on:
-      - org_invite_vaultwarden
+      - vaultwarden
     # or use image instead of building it
     # image: chistokhinsv/vaultwarden-ldap-sync:latest
     restart: on-failure

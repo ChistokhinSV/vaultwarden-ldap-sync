@@ -45,17 +45,17 @@ docker compose -f docker-compose.vaultwarden.yml up -d
 4. **Backup the Populated Database**
 
 ```sh
-docker exec -it org_invite_vaultwarden /vaultwarden backup
+docker exec -it ldap_sync_vaultwarden /vaultwarden backup
 ```
 
 or
 
 ```sh
-# make sqlite3 backup comand to use real path to the org_invite_vaultwarden_data volume in the host (/lib/docker/volumes/org_invite_vaultwarden_data/_data)
-cd /lib/docker/volumes/org_invite_vaultwarden_data/_data
+# make sqlite3 backup comand to use real path to the ldap_sync_vaultwarden_data volume in the host (/lib/docker/volumes/ldap_sync_vaultwarden_data/_data)
+cd /lib/docker/volumes/ldap_sync_vaultwarden_data/_data
 sqlite3 db.sqlite3 ".backup './db-backup.sqlite3'"
 ```
-- Copy `/lib/docker/volumes/org_invite_vaultwarden_data/_data/db-backup.sqlite3` (or /data/db_YYYYMMDD_HHMMSS.sqlite3 if you use /vaultwarden backup) to your host for building a pre-populated image.
+- Copy `/lib/docker/volumes/ldap_sync_vaultwarden_data/_data/db-backup.sqlite3` (or /data/db_YYYYMMDD_HHMMSS.sqlite3 if you use /vaultwarden backup) to your host for building a pre-populated image.
 
 5. **Build Pre-Populated VaultWarden Image**
 
@@ -71,5 +71,5 @@ sqlite3 db.sqlite3 ".backup './db-backup.sqlite3'"
 ---
 
 ## Notes
-- All containers/services for the demo environment should use the `org_invite_` prefix for consistency.
+- All containers/services for the demo environment should use the `ldap_sync_` prefix for consistency.
 - For VaultWarden version updates, repeat the provisioning and backup process, then rebuild and push the new image.

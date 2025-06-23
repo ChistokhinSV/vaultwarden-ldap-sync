@@ -1,12 +1,12 @@
 services:
-  org_invite_389ds:
+  ldap_sync_389ds:
     image: chistokhinsv/389ds-dev-populated:latest
-    container_name: org_invite_389ds
+    container_name: ldap_sync_389ds
     hostname: ds.domain.local
     environment:
       - DS_DM_PASSWORD=adminpassword
       - DS_SUFFIX_NAME=dc=domain,dc=local
-      - DS_SERVERID=org_invite_389ds
+      - DS_SERVERID=ldap_sync_389ds
       - DS_BACKEND_NAME=userRoot
     ports:
       - "3389:3389"
