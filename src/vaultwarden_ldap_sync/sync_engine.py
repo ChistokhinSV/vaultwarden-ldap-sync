@@ -93,7 +93,7 @@ def run_sync(
     # --------------------------------------------------------------
     cfg_dict = asdict(cfg)
     for k in cfg_dict:
-        if any(s in k.lower() for s in ("password", "secret")):
+        if any(s in k.lower() for s in ("password", "secret", "token")):
             cfg_dict[k] = "***"
     logger.debug("Starting sync run with config: %s", cfg_dict)
 

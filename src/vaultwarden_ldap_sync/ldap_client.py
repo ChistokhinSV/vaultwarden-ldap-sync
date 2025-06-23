@@ -103,11 +103,11 @@ def fetch_users(
 
     search_filter = build_ldap_filter(object_type, groups, additional_filter, group_attr=group_attr)
 
-    logger.debug("Fetching LDAP at %s with filter: %s", base_dn, search_filter)
-
     attributes = [email_attr, group_attr]
     if disabled_attr:
         attributes.append(disabled_attr)
+
+    logger.debug(f"Fetching LDAP at {base_dn} with filter: {search_filter} and attributes: {attributes}")
 
     conn.search(search_base=base_dn, search_filter=search_filter, attributes=attributes)
 

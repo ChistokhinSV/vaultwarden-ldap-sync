@@ -18,7 +18,7 @@ YES_VALUES = ("1", "TRUE", "YES", "ON", "true", "yes", "on")
 # Logging
 # ---------------------------------------------------------------------------
 
-def setup_logging() -> logging.Logger:
+def _setup_logging() -> logging.Logger:
     """Configure and return the application logger."""
 
     debug = os.getenv("DEBUG", "").upper() in YES_VALUES
@@ -43,7 +43,7 @@ def setup_logging() -> logging.Logger:
     # Application logger inherits the root handler – return it for convenience
     return logging.getLogger("vaultwarden_ldap_sync")
 
-logger = setup_logging()
+logger = _setup_logging()
 
 
 # ---------------------------------------------------------------------------
