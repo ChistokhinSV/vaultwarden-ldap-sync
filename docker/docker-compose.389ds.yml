@@ -1,0 +1,14 @@
+services:
+  ldap_sync_389ds:
+    image: chistokhinsv/389ds-dev-populated:latest
+    container_name: ldap_sync_389ds
+    hostname: ds.domain.local
+    environment:
+      - DS_DM_PASSWORD=adminpassword
+      - DS_SUFFIX_NAME=dc=domain,dc=local
+      - DS_SERVERID=ldap_sync_389ds
+      - DS_BACKEND_NAME=userRoot
+    ports:
+      - "3389:3389"
+      - "3636:3636"
+

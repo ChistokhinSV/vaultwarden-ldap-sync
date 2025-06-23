@@ -1,0 +1,8 @@
+services:
+  ldap_sync_vaultwarden:
+    image: chistokhinsv/vaultwarden-dev-populated:latest
+    container_name: ldap_sync_vaultwarden
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    # No volumes! Data is inside the image

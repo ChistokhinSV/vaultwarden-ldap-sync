@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  vaultwarden-ldap-sync:
+    container_name: org_invite_vaultwarden_ldap_sync
+    image: chistokhinsv/vaultwarden-ldap-sync:latest
+    build: .
+    env_file:
+      - .env
+    environment:
+      - DEBUG=0
+    restart: unless-stopped

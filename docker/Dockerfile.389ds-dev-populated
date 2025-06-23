@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+FROM alpine:3.19.1 as builder
+WORKDIR /build
+COPY 389ds.container-entrypoint.sh .
+COPY 389ds.once.sh .
+COPY 389ds_initdb.d ./389ds_initdb.d
+
+FROM 389ds/dirsrv:latest
+USER root
+# Install tini and openldap-clients (ldap utilities)
+RUN zypper --non-interactive install tini \
+    && zypper clean -a
+
+# Copy scripts from builder
+COPY --from=builder /build/389ds.container-entrypoint.sh /container-entrypoint.sh
+RUN chmod +x /container-entrypoint.sh
+COPY --from=builder /build/389ds.once.sh /once.sh
+COPY --from=builder /build/389ds_initdb.d /container-entrypoint-initdb.d
+
+# Run once.sh at build time for one-time setup (if needed)
+RUN chmod +x /once.sh && /once.sh
+
+# Entrypoint for tini and your custom entrypoint
+ENTRYPOINT ["/sbin/tini", "--", "/container-entrypoint.sh"]

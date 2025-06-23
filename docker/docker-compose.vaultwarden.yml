@@ -1,0 +1,18 @@
+services:
+  org_invite_vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: org_invite_vaultwarden
+    restart: unless-stopped
+    environment:
+      ADMIN_TOKEN: "$$argon2id$$v=19$$m=65540,t=3,p=4$$feGEx6pnYAk48r0C9gAhcRLEksQxZ09dZxlxpKz735I$$9O66H64jds3g2fRxJTmazL7Kj0BPvaQ+0UVHsChJqJI"
+      SIGNUPS_ALLOWED: "true"
+      # Uncomment for debugging
+      # LOG_LEVEL: "debug"
+    ports:
+      - "8080:80"
+    volumes:
+      - vaultwarden_data:/data
+
+volumes:
+  vaultwarden_data:
+    name: org_invite_vaultwarden_data
