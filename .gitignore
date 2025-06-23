@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 # Local environment files
 .env
+docker-compose.override.yml
 # C extensions
 *.so
 # Distribution / packaging

@@ -70,7 +70,7 @@ def _build_server(host: str, ignore_cert: bool = False, ca_file: str | None = No
             tls = Tls(validate=ssl.CERT_NONE)
         elif ca_file:
             tls = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ca_file)
-    return Server(clean_host, use_ssl=use_ssl, get_info=ALL, tls=tls)
+    return Server(clean_host, use_ssl=use_ssl, get_info=None, tls=tls)
 
 
 # Public API -----------------------------------------------------------------

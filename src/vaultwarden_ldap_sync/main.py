@@ -11,6 +11,9 @@ import time
 from vaultwarden_ldap_sync.config import Config
 from vaultwarden_ldap_sync.sync_engine import run_sync
 
+import gc
+from collections import Counter
+
 # Truthy values helper
 YES_VALUES = ("1", "TRUE", "YES", "ON", "true", "yes", "on")
 
@@ -48,6 +51,34 @@ def _setup_logging() -> logging.Logger:
 
 logger = _setup_logging()
 
+# ---------------------------------------------------------------------------
+# Memory tracking
+# ---------------------------------------------------------------------------
+
+class ObjectTracker:
+    def __init__(self):
+        self.previous_counts = Counter()
+    
+    def track_growth(self):
+        objectcount = gc.get_objects()
+        current_counts = Counter(type(obj).__name__ for obj in objectcount)
+        objects_of_type = [obj for obj in objectcount if type(obj).__name__ == "list"]
+        
+        if self.previous_counts:
+            growth = {
+                obj_type: current_counts[obj_type] - self.previous_counts[obj_type]
+                for obj_type in current_counts
+                if current_counts[obj_type] > self.previous_counts[obj_type]
+            }
+            
+            # Show objects that grew by more than 100
+            significant_growth = {k: v for k, v in growth.items() if v > 100}
+            if significant_growth:
+                logger.debug(f"Object count: {len(objectcount)}, object growth: {significant_growth}")
+        
+        self.previous_counts = current_counts
+
+tracker = ObjectTracker()
 
 # ---------------------------------------------------------------------------
 # Main entrypoint
@@ -66,6 +97,7 @@ def main() -> None:
 
     while True:
         try:
+            tracker.track_growth()
             run_sync(cfg)
             failures = 0  # reset on success
         except Exception:  # noqa: BLE001
