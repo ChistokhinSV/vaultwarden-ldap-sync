@@ -74,12 +74,16 @@ Boolean variables understand any of `1`, `true`, `yes`, `on` (case-insensitive) 
 ```yaml
 services:
   vaultwarden-ldap-sync:
-    build: .
-    env_file:
-      - .env
-    depends_on:
-      - vaultwarden
-    # or use image instead of building it
-    # image: chistokhinsv/vaultwarden-ldap-sync:latest
-    restart: on-failure
+    image: chistokhinsv/vaultwarden-ldap-sync:latest
+    container_name: vaultwarden-ldap-sync
+    restart: unless-stopped
+    environment:
+      - LDAP_HOST=ldap://ldap.example.com
+      - LDAP_BIND_DN=cn=admin,dc=example,dc=com
+      - LDAP_BIND_PASSWORD=secret
+      - VW_URL=https://vaultwarden.example.com
+      - VW_USER_CLIENT_ID=user.UUID
+      - VW_USER_CLIENT_SECRET=your_client_secret
+      - VW_ORG_ID=organization.UUID
+      - LDAP_USER_GROUPS=cn=vaultwarden-users,dc=example,dc=com
 ```

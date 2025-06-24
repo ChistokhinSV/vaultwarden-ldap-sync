@@ -6,6 +6,8 @@ __pycache__/
 # Local environment files
 .env
 docker-compose.override.yml
+# Internal documentation and reference files
+reference/
 # C extensions
 *.so
 # Distribution / packaging
