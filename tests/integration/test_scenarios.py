@@ -38,8 +38,8 @@ class IntegrationTestBase:
         cls.config = Config()
         cls.vw_client = VaultWardenClient(
             url=cls.config.vw_url,
-            client_id=cls.config.vw_user_client_id,
-            client_secret=cls.config.vw_user_client_secret,
+            client_id=cls.config.vw_client_id,
+            client_secret=cls.config.vw_client_secret,
             org_id=cls.config.vw_org_id,
         )
     
@@ -254,7 +254,7 @@ class TestLdapUserStatusScenarios(IntegrationTestBase):
             bind_dn=self.config.ldap_bind_dn,
             bind_password=self.config.ldap_bind_password,
             base_dn=self.config.ldap_base_dn,
-            groups=getattr(self.config, 'ldap_groups', None),
+            groups=getattr(self.config, 'ldap_user_groups', None),
         )
         
         # user4 should be disabled
@@ -273,7 +273,7 @@ class TestLdapUserStatusScenarios(IntegrationTestBase):
             bind_dn=self.config.ldap_bind_dn,
             bind_password=self.config.ldap_bind_password,
             base_dn=self.config.ldap_base_dn,
-            groups=getattr(self.config, 'ldap_groups', None),
+            groups=getattr(self.config, 'ldap_user_groups', None),
         )
         
         # Users without disabled attribute should default to enabled
