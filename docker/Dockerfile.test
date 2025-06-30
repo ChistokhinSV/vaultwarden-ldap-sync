@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# Install test dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install pytest pytest-cov pytest-timeout pytest-xvfb
+
+# Copy source code and tests
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY pytest.ini ./
+
+# Set Python path for module imports
+ENV PYTHONPATH="/app/src:${PYTHONPATH}"
+
+CMD ["python", "-m", "pytest", "tests/integration/", "-v", "--tb=short"]

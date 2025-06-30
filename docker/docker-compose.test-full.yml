@@ -60,7 +60,7 @@ services:
   test_runner:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile.test
     container_name: ldap_sync_test_runner
     environment:
       # LDAP configuration
