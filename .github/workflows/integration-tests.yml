@@ -50,6 +50,7 @@ jobs:
     
     - name: Run unit tests
       run: |
+        export PYTHONPATH="${PYTHONPATH}:src"
         python -m pytest tests/unit/ -v --cov=src/vaultwarden_ldap_sync --cov-report=xml --cov-report=term-missing
     
     - name: Run integration tests
@@ -59,6 +60,7 @@ jobs:
     - name: Run LDAP integration tests (direct)
       run: |
         # Run LDAP tests directly against local services
+        export PYTHONPATH="${PYTHONPATH}:src"
         LDAP_HOST=ldap://localhost:3389 python -m pytest tests/integration/test_ldap_client_fetch.py -v
     
     - name: Collect Docker logs on failure
@@ -119,6 +121,7 @@ jobs:
         timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
         
         # Run privilege-specific tests
+        export PYTHONPATH="${PYTHONPATH}:src"
         python -m pytest tests/integration/test_scenarios.py::TestPrivilegeScenarios -v
         
         # Clean up
@@ -152,6 +155,7 @@ jobs:
         timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
         
         # Run multi-org tests (may skip if not implemented)
+        export PYTHONPATH="${PYTHONPATH}:src"
         python -m pytest tests/integration/test_scenarios.py::TestMultiOrgScenarios -v || true
         
         # Clean up
@@ -184,6 +188,7 @@ jobs:
         timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
         
         # Run error handling tests
+        export PYTHONPATH="${PYTHONPATH}:src"
         python -m pytest tests/integration/test_scenarios.py::TestErrorHandlingScenarios -v
         
         # Clean up
