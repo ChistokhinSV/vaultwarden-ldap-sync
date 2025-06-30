@@ -10,12 +10,10 @@ import time
 
 from vaultwarden_ldap_sync.config import Config
 from vaultwarden_ldap_sync.sync_engine import run_sync
+from vaultwarden_ldap_sync.core.constants import YES_VALUES, DEFAULT_SYNC_INTERVAL, DEFAULT_MAX_FAILURES
 
 import gc
 from collections import Counter
-
-# Truthy values helper
-YES_VALUES = ("1", "TRUE", "YES", "ON", "true", "yes", "on")
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -24,10 +22,10 @@ YES_VALUES = ("1", "TRUE", "YES", "ON", "true", "yes", "on")
 def _setup_logging() -> logging.Logger:
     """Configure and return the application logger."""
 
-    debug = os.getenv("DEBUG", "").upper() in YES_VALUES
+    debug = os.getenv('DEBUG', '').upper() in YES_VALUES
 
     # Configure only the application logger, not the root logger
-    app_logger = logging.getLogger("vaultwarden_ldap_sync")
+    app_logger = logging.getLogger('vaultwarden_ldap_sync')
     app_logger.setLevel(logging.DEBUG if debug else logging.INFO)
     
     # Prevent propagation to the root logger to avoid affecting other modules
@@ -38,8 +36,8 @@ def _setup_logging() -> logging.Logger:
         app_logger.removeHandler(h)
 
     formatter = logging.Formatter(
-        fmt="[%(asctime)s] [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S %d.%m.%y",
+        fmt='[%(asctime)s] [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S %d.%m.%y',
     )
 
     console_handler = logging.StreamHandler()
@@ -62,7 +60,7 @@ class ObjectTracker:
     def track_growth(self):
         objectcount = gc.get_objects()
         current_counts = Counter(type(obj).__name__ for obj in objectcount)
-        objects_of_type = [obj for obj in objectcount if type(obj).__name__ == "list"]
+        objects_of_type = [obj for obj in objectcount if type(obj).__name__ == 'list']
         
         if self.previous_counts:
             growth = {
@@ -74,7 +72,7 @@ class ObjectTracker:
             # Show objects that grew by more than 100
             significant_growth = {k: v for k, v in growth.items() if v > 100}
             if significant_growth:
-                logger.debug(f"Object count: {len(objectcount)}, object growth: {significant_growth}")
+                logger.debug(f'Object count: {len(objectcount)}, object growth: {significant_growth}')
         
         self.previous_counts = current_counts
 
@@ -87,11 +85,11 @@ tracker = ObjectTracker()
 def main() -> None:
     """Run the VaultWarden-LDAP sync engine once or in a loop."""
     cfg = Config()
-    interval = int(os.getenv("SYNC_INTERVAL", "60"))
-    max_failures = int(os.getenv("MAX_CONSECUTIVE_FAILURES", "5"))
-    run_once = os.getenv("RUN_ONCE", "0").strip().upper() in YES_VALUES
+    interval = int(os.getenv('SYNC_INTERVAL', str(DEFAULT_SYNC_INTERVAL)))
+    max_failures = int(os.getenv('MAX_CONSECUTIVE_FAILURES', str(DEFAULT_MAX_FAILURES)))
+    run_once = os.getenv('RUN_ONCE', '0').strip().upper() in YES_VALUES
 
-    logger.info("Starting sync (interval=%ss, run_once=%s, max_failures=%s)", interval, run_once, max_failures)
+    logger.info(f'Starting sync (interval={interval}s, run_once={run_once}, max_failures={max_failures})')
 
     failures = 0
 
@@ -102,16 +100,16 @@ def main() -> None:
             failures = 0  # reset on success
         except Exception:  # noqa: BLE001
             failures += 1
-            logger.exception("Sync cycle failed (consecutive failures: %s)", failures)
+            logger.exception(f'Sync cycle failed (consecutive failures: {failures})')
             if failures >= max_failures:
-                logger.critical("Exceeded MAX_CONSECUTIVE_FAILURES (%s), exiting", max_failures)
+                logger.critical(f'Exceeded MAX_CONSECUTIVE_FAILURES ({max_failures}), exiting')
                 sys.exit(1)
         if run_once:
             break
         time.sleep(interval)
 
-    logger.info("Sync finished, exiting")
+    logger.info('Sync finished, exiting')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
