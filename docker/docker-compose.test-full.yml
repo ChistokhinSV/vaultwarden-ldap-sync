@@ -72,9 +72,9 @@ services:
       
       # VaultWarden configuration
       - VW_URL=http://ldap_sync_vaultwarden
-      - VW_USER_CLIENT_ID=user_test_client_id
-      - VW_USER_CLIENT_SECRET=user_test_client_secret
-      - VW_ORG_ID=test_org_id
+      - VW_USER_CLIENT_ID=user.810e12f0-e8dc-42e1-a592-a6f36f74d35b
+      - VW_USER_CLIENT_SECRET=fxBn9nB4neag2HD6SYvzyejxsMPyt9
+      - VW_ORG_ID=2822e5d3-3a77-4ffb-bc78-d4ac6e6512b0
       
       # Test configuration
       - RUN_ONCE=1

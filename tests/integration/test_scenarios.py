@@ -61,9 +61,9 @@ class IntegrationTestBase:
         """Configure VaultWarden environment variables."""
         defaults = {
             'VW_URL': 'http://localhost:8080',
-            'VW_USER_CLIENT_ID': 'user_test_client_id',
-            'VW_USER_CLIENT_SECRET': 'user_test_client_secret',
-            'VW_ORG_ID': 'test_org_id',
+            'VW_USER_CLIENT_ID': 'user.810e12f0-e8dc-42e1-a592-a6f36f74d35b',
+            'VW_USER_CLIENT_SECRET': 'fxBn9nB4neag2HD6SYvzyejxsMPyt9',
+            'VW_ORG_ID': '2822e5d3-3a77-4ffb-bc78-d4ac6e6512b0',
             'PREVENT_SELF_LOCK': '1',
             'RUN_ONCE': '1',
         }
@@ -91,14 +91,14 @@ class IntegrationTestBase:
     
     def reset_vw_org_users(self):
         """Reset VaultWarden org to clean state."""
-        # Remove all users except the sync user
+        # Remove all users except the sync user (user@domain.local)
         users = self.vw_client.list_users()
-        sync_user_email = os.getenv('VW_SYNC_USER_EMAIL', 'sync@domain.local')
+        sync_user_email = 'user@domain.local'  # The actual user from populated container
         
-        for user_id, user in users.items():
+        for user in users:
             if user.email != sync_user_email:
                 try:
-                    self.vw_client.revoke(user_id)
+                    self.vw_client.revoke(user.id)
                 except Exception:
                     pass
 
