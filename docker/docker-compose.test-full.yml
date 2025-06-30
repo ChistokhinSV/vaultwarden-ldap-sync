@@ -29,8 +29,9 @@ services:
       - ADMIN_TOKEN=$$argon2id$$v=19$$m=65540,t=3,p=4$$feGEx6pnYAk48r0C9gAhcRLEksQxZ09dZxlxpKz735I$$9O66H64jds3g2fRxJTmazL7Kj0BPvaQ+0UVHsChJqJI
       - SIGNUPS_ALLOWED=true
       - INVITATIONS_ALLOWED=true
-      - SMTP_HOST=
-      - SMTP_FROM=
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_FROM=test@domain.local
       - DOMAIN=http://localhost:8080
     ports:
       - "8080:80"
