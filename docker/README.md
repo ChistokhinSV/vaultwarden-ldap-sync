@@ -146,7 +146,7 @@ sqlite3 db.sqlite3 ".backup './db-backup.sqlite3'"
 
 The repository includes a comprehensive CI/CD pipeline that:
 
-1. **Matrix Testing** - Tests across Python 3.9, 3.10, 3.11
+1. **Matrix Testing** - Tests across Python 3.10, 3.11, 3.12
 2. **Parallel Execution** - Runs different test categories in parallel
 3. **Service Health Checks** - Ensures LDAP and VaultWarden are ready
 4. **Coverage Reporting** - Generates coverage reports and uploads to Codecov
