@@ -1,0 +1,101 @@
+services:
+  # 389ds LDAP server with test data
+  ldap_sync_389ds:
+    image: chistokhinsv/389ds-dev-populated:latest
+    container_name: ldap_sync_389ds_test
+    hostname: ds.domain.local
+    environment:
+      - DS_DM_PASSWORD=adminpassword
+      - DS_SUFFIX_NAME=dc=domain,dc=local
+      - DS_SERVERID=ldap_sync_389ds
+      - DS_BACKEND_NAME=userRoot
+    ports:
+      - "3389:3389"
+      - "3636:3636"
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:3389", "-D", "cn=Directory Manager", "-w", "adminpassword", "-b", "dc=domain,dc=local", "(objectClass=*)", "dn"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - test_network
+
+  # VaultWarden server with test organization
+  ldap_sync_vaultwarden:
+    image: chistokhinsv/vaultwarden-dev-populated:latest
+    container_name: ldap_sync_vaultwarden_test
+    environment:
+      - ADMIN_TOKEN=$$argon2id$$v=19$$m=65540,t=3,p=4$$feGEx6pnYAk48r0C9gAhcRLEksQxZ09dZxlxpKz735I$$9O66H64jds3g2fRxJTmazL7Kj0BPvaQ+0UVHsChJqJI
+      - SIGNUPS_ALLOWED=true
+      - INVITATIONS_ALLOWED=true
+      - SMTP_HOST=
+      - SMTP_FROM=
+      - DOMAIN=http://localhost:8080
+    ports:
+      - "8080:80"
+    volumes:
+      - vaultwarden-test-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/alive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - test_network
+
+  # Test SMTP server for email testing (optional)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ldap_sync_mailhog_test
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI port
+    networks:
+      - test_network
+
+  # Integration test runner
+  test_runner:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: ldap_sync_test_runner
+    environment:
+      # LDAP configuration
+      - LDAP_HOST=ldap://ldap_sync_389ds:3389
+      - LDAP_BIND_DN=cn=Directory Manager
+      - LDAP_BIND_PASSWORD=adminpassword
+      - LDAP_BASE_DN=dc=domain,dc=local
+      - LDAP_GROUPS=cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local
+      
+      # VaultWarden configuration
+      - VW_URL=http://ldap_sync_vaultwarden
+      - VW_USER_CLIENT_ID=user_test_client_id
+      - VW_USER_CLIENT_SECRET=user_test_client_secret
+      - VW_ORG_ID=test_org_id
+      
+      # Test configuration
+      - RUN_ONCE=1
+      - PREVENT_SELF_LOCK=1
+      - PYTEST_MARKERS=integration
+      
+      # Optional SMTP for email testing
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_FROM=test@domain.local
+    depends_on:
+      ldap_sync_389ds:
+        condition: service_healthy
+      ldap_sync_vaultwarden:
+        condition: service_healthy
+    command: ["python", "-m", "pytest", "tests/integration/", "-v", "--tb=short"]
+    networks:
+      - test_network
+
+volumes:
+  vaultwarden-test-data:
+
+networks:
+  test_network:
+    driver: bridge

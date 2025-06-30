@@ -1,0 +1,25 @@
+# Enhanced 389ds test image with comprehensive test data
+FROM quay.io/389ds/dirsrv:3.0
+
+# Copy test data setup script
+COPY test-data-setup.sh /usr/local/bin/test-data-setup.sh
+RUN chmod +x /usr/local/bin/test-data-setup.sh
+
+# Enhanced entrypoint script
+COPY 389ds.container-entrypoint-enhanced.sh /usr/local/bin/389ds.container-entrypoint-enhanced.sh
+RUN chmod +x /usr/local/bin/389ds.container-entrypoint-enhanced.sh
+
+# Copy initialization scripts
+COPY 389ds_initdb.d/ /opt/389ds_initdb.d/
+
+# Environment variables for test setup
+ENV DS_DM_PASSWORD=adminpassword
+ENV DS_SUFFIX_NAME=dc=domain,dc=local
+ENV DS_SERVERID=ldap_sync_389ds
+ENV DS_BACKEND_NAME=userRoot
+
+# Expose LDAP ports
+EXPOSE 3389 3636
+
+# Use enhanced entrypoint
+ENTRYPOINT ["/usr/local/bin/389ds.container-entrypoint-enhanced.sh"]
