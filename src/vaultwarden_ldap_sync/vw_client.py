@@ -159,63 +159,46 @@ class VaultWardenClient:
         return ''.join(details)
     
     def _safe_read_response_body(self, response) -> str:
-        """Safely read response body from httpx response, handling streaming responses."""
+        """Return the response body (JSON or text) using *httpx* public API.
+
+        The upstream *python-vaultwarden* client performs *synchronous* requests
+        with ``stream=False`` (the default), therefore the body is always fully
+        available – we only have to *read* it.  Rely on the official
+        ``response.json()``, ``response.text`` and ``response.content`` helpers
+        instead of digging through private attributes that are brittle across
+        *httpx* versions.
+        """
         try:
-            # Strategy 1: Try to access the raw response content via internal attributes
-            # httpx stores the response content in different places depending on how it was read
-            
-            # Check for already consumed content in httpx internal structures
-            if hasattr(response, '_content') and response._content is not None:
+            # 1. JSON – this is what VaultWarden returns on errors
+            json_ct = response.headers.get("content-type", "").lower()
+            if "application/json" in json_ct:
                 try:
-                    content_bytes = response._content
-                    content_text = content_bytes.decode('utf-8', errors='replace')
-                    return self._parse_error_from_text(content_text)
-                except Exception as e:
-                    logger.debug(f"Failed to decode _content: {e}")
-            
-            # Strategy 2: Try to access the raw stream content directly
-            # Some httpx versions store content in _raw_stream
-            if hasattr(response, '_raw_stream') and response._raw_stream is not None:
-                try:
-                    # Try to read from the raw stream
-                    stream = response._raw_stream
-                    if hasattr(stream, '_buffer') and stream._buffer:
-                        content_bytes = stream._buffer
-                        content_text = content_bytes.decode('utf-8', errors='replace')
-                        return self._parse_error_from_text(content_text)
-                except Exception as e:
-                    logger.debug(f"Failed to read from _raw_stream: {e}")
-            
-            # Strategy 3: Try to force-consume the iterator if available
-            if hasattr(response, '_content_consumed') and not response._content_consumed:
-                try:
-                    # Force reading by consuming the iterator manually
-                    if hasattr(response, 'iter_bytes'):
-                        content_bytes = b''.join(response.iter_bytes())
-                        content_text = content_bytes.decode('utf-8', errors='replace')
-                        return self._parse_error_from_text(content_text)
-                except Exception as e:
-                    logger.debug(f"Failed to consume iterator: {e}")
-            
-            # Strategy 4: Check if response has a _decoder with content
-            if hasattr(response, '_decoder') and response._decoder is not None:
-                try:
-                    decoder = response._decoder
-                    if hasattr(decoder, 'flush'):
-                        content_bytes = decoder.flush()
-                        if content_bytes:
-                            content_text = content_bytes.decode('utf-8', errors='replace')
-                            return self._parse_error_from_text(content_text)
-                except Exception as e:
-                    logger.debug(f"Failed to read from decoder: {e}")
-            
-            # If all strategies fail, provide helpful info
-            content_type = getattr(response, 'headers', {}).get('content-type', 'unknown')
-            return f'[Response body not accessible - streaming response, Content-Type: {content_type}]'
-            
-        except Exception as e:
-            logger.debug(f"Error in _safe_read_response_body: {e}")
-            return f'[Error reading response body: {type(e).__name__}]'
+                    # Let the dedicated helper turn the structure into a message
+                    return self._extract_json_error_message(response)
+                except Exception as err:  # noqa: W0703 – best-effort only
+                    logger.debug("Failed to parse JSON error body: %s", err)
+
+            # 2. Text – falls back to decoding *content* which will transparently
+            #    read the body if it has not been consumed yet.
+            try:
+                text = response.text  # property triggers read() if necessary
+                if text:
+                    return self._parse_error_from_text(text)
+            except Exception as err:
+                logger.debug("Failed to access response.text: %s", err)
+
+            # 3. Raw bytes as a last resort – should not normally be needed
+            try:
+                raw = response.content  # bytes, triggers read() if necessary
+                if raw:
+                    return self._parse_error_from_text(raw.decode("utf-8", "replace"))
+            except Exception as err:
+                logger.debug("Failed to access response.content: %s", err)
+
+            return "[Empty response body]"
+        except Exception as e:  # pragma: no cover – defensive
+            logger.debug("Unhandled error in _safe_read_response_body: %s", e)
+            return f"[Error reading response body: {type(e).__name__}]"
     
     def _parse_error_from_text(self, content_text: str) -> str:
         """Parse error message from response text content."""
