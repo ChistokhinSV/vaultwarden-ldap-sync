@@ -33,6 +33,8 @@ services:
       - SMTP_PORT=1025
       - SMTP_FROM=test@domain.local
       - DOMAIN=http://localhost:8080
+      - LOG_LEVEL=debug
+      - EXTENDED_LOGGING=true
     ports:
       - "8080:80"
     volumes:
@@ -68,7 +70,7 @@ services:
       - LDAP_BIND_DN=cn=Directory Manager
       - LDAP_BIND_PASSWORD=adminpassword
       - LDAP_BASE_DN=dc=domain,dc=local
-      - LDAP_GROUPS=cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local
+      - LDAP_USER_GROUPS=cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local
       
       # VaultWarden configuration
       - VW_URL=http://ldap_sync_vaultwarden

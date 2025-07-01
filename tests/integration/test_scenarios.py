@@ -51,7 +51,7 @@ class IntegrationTestBase:
             'LDAP_BIND_DN': 'cn=Directory Manager',
             'LDAP_BIND_PASSWORD': 'adminpassword',
             'LDAP_BASE_DN': 'dc=domain,dc=local',
-            'LDAP_GROUPS': 'cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local',
+            'LDAP_USER_GROUPS': 'cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local',
         }
         for key, value in defaults.items():
             os.environ.setdefault(key, value)
@@ -177,31 +177,31 @@ class TestMultiOrgScenarios(IntegrationTestBase):
     
     def test_multi_org_config_parsing(self):
         """Test config parser for VW_USER_CLIENT_ID_* and VW_ORG_ID_* sections."""
-        # Set up multi-org environment variables
+        # Set up multi-org environment variables with real org IDs
         os.environ.update({
-            'VW_USER_CLIENT_ID_ORG1': 'client_id_org1',
-            'VW_USER_CLIENT_SECRET_ORG1': 'client_secret_org1',
-            'VW_ORG_ID_ORG1': 'org_id_1',
-            'VW_USER_CLIENT_ID_ORG2': 'client_id_org2',
-            'VW_USER_CLIENT_SECRET_ORG2': 'client_secret_org2',
-            'VW_ORG_ID_ORG2': 'org_id_2',
+            'VW_USER_CLIENT_ID_VAULTWARDEN': 'user.810e12f0-e8dc-42e1-a592-a6f36f74d35b',
+            'VW_USER_CLIENT_SECRET_VAULTWARDEN': 'fxBn9nB4neag2HD6SYvzyejxsMPyt9',
+            'VW_ORG_ID_VAULTWARDEN': '2822e5d3-3a77-4ffb-bc78-d4ac6e6512b0',
+            'VW_USER_CLIENT_ID_TESTING': 'user.810e12f0-e8dc-42e1-a592-a6f36f74d35b',
+            'VW_USER_CLIENT_SECRET_TESTING': 'fxBn9nB4neag2HD6SYvzyejxsMPyt9',
+            'VW_ORG_ID_TESTING': '0b1fe0cf-f39a-4baa-a326-52eae00b261d',
         })
         
         # Test multi-org config parsing
         try:
             multi_configs = Config.parse_multi_org_config()
             assert len(multi_configs) == 2
-            assert 'ORG1' in multi_configs
-            assert 'ORG2' in multi_configs
+            assert 'VAULTWARDEN' in multi_configs
+            assert 'TESTING' in multi_configs
         except NotImplementedError:
             pytest.skip('Multi-org config parsing not yet implemented')
     
     def test_ldap_group_org_assignment(self):
         """Test LDAP group-based organization assignment logic."""
-        # Set up group-based org assignment
+        # Set up group-based org assignment with real groups
         os.environ.update({
-            'LDAP_GROUPS_ORG1': 'cn=vw-org1,cn=groups,cn=accounts,dc=domain,dc=local',
-            'LDAP_GROUPS_ORG2': 'cn=vw-org2,cn=groups,cn=accounts,dc=domain,dc=local',
+            'LDAP_USER_GROUPS_VAULTWARDEN': 'cn=vaultwarden-users,cn=groups,cn=accounts,dc=domain,dc=local',
+            'LDAP_USER_GROUPS_TESTING': 'cn=vaultwarden-users-testing,cn=groups,cn=accounts,dc=domain,dc=local',
         })
         
         try:
@@ -325,13 +325,29 @@ class TestFullSyncScenarios(IntegrationTestBase):
     
     def test_sync_with_different_ldap_groups(self):
         """Test multi-org feature with different LDAP group filters per organization."""
-        # Set up different groups for different orgs
-        os.environ.update({
-            'LDAP_GROUPS_ORG1': 'cn=vw-org1,cn=groups,cn=accounts,dc=domain,dc=local',
-            'LDAP_GROUPS_ORG2': 'cn=vw-org2,cn=groups,cn=accounts,dc=domain,dc=local',
-        })
+        # Test the vaultwarden-users-testing group with user3 and user4
+        users = fetch_users(
+            host=self.config.ldap_host,
+            bind_dn=self.config.ldap_bind_dn,
+            bind_password=self.config.ldap_bind_password,
+            base_dn=self.config.ldap_base_dn,
+            groups='cn=vaultwarden-users-testing,cn=groups,cn=accounts,dc=domain,dc=local',
+        )
         
-        pytest.skip('Requires multi-org implementation and test group setup')
+        # Should find user3 and user4 in the testing group
+        found_users = {u.email.split('@')[0] if u.email else u.dn.split(',')[0].split('=')[1] for u in users}
+        expected_users = {'user3', 'user4'}
+        
+        assert expected_users.issubset(found_users), f'Expected users {expected_users} not found in testing group. Found: {found_users}'
+        
+        # user4 should be disabled, user3 should be active
+        user3 = next((u for u in users if 'user3' in u.dn), None)
+        user4 = next((u for u in users if 'user4' in u.dn), None)
+        
+        assert user3 is not None, 'user3 should be in vaultwarden-users-testing group'
+        assert user4 is not None, 'user4 should be in vaultwarden-users-testing group'
+        assert user3.disabled is False, 'user3 should be active'
+        assert user4.disabled is True, 'user4 should be disabled'
 
 
 @pytest.fixture(scope='session')
