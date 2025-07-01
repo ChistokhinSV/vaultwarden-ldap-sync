@@ -46,7 +46,7 @@ jobs:
         timeout 60 bash -c 'until docker compose -f docker/docker-compose.test-full.yml exec -T ldap_sync_389ds ldapsearch -x -H ldap://localhost:3389 -D "cn=Directory Manager" -w adminpassword -b "dc=domain,dc=local" "(objectClass=*)" dn; do sleep 2; done'
         
         # Wait for VaultWarden to be ready
-        timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
+        timeout 60 bash -c 'until curl -f http://localhost:8081/alive; do sleep 2; done'
     
     - name: Run unit tests
       run: |
@@ -115,14 +115,13 @@ jobs:
     - name: Test sync user privilege scenarios
       run: |
         # Start test environment
-        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden
+        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden mailhog
         
         # Wait for services
-        timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
+        timeout 60 bash -c 'until curl -f http://localhost:8081/alive; do sleep 2; done'
         
-        # Run privilege-specific tests
-        export PYTHONPATH="${PYTHONPATH}:src"
-        python -m pytest tests/integration/test_scenarios.py::TestPrivilegeScenarios -v
+        # Run privilege-specific tests inside container with proper environment
+        docker compose -f docker/docker-compose.test-full.yml run --rm test_runner python -m pytest tests/integration/test_scenarios.py::TestPrivilegeScenarios -v
         
         # Clean up
         docker compose -f docker/docker-compose.test-full.yml down -v
@@ -149,14 +148,13 @@ jobs:
     - name: Test multi-organization scenarios
       run: |
         # Start test environment
-        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden
+        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden mailhog
         
         # Wait for services
-        timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
+        timeout 60 bash -c 'until curl -f http://localhost:8081/alive; do sleep 2; done'
         
-        # Run multi-org tests (may skip if not implemented)
-        export PYTHONPATH="${PYTHONPATH}:src"
-        python -m pytest tests/integration/test_scenarios.py::TestMultiOrgScenarios -v || true
+        # Run multi-org tests inside container with proper environment (may skip if not implemented)
+        docker compose -f docker/docker-compose.test-full.yml run --rm test_runner python -m pytest tests/integration/test_scenarios.py::TestMultiOrgScenarios -v || true
         
         # Clean up
         docker compose -f docker/docker-compose.test-full.yml down -v
@@ -182,14 +180,13 @@ jobs:
     - name: Test error handling scenarios
       run: |
         # Start test environment
-        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden
+        docker compose -f docker/docker-compose.test-full.yml up -d ldap_sync_389ds ldap_sync_vaultwarden mailhog
         
         # Wait for services
-        timeout 60 bash -c 'until curl -f http://localhost:8080/alive; do sleep 2; done'
+        timeout 60 bash -c 'until curl -f http://localhost:8081/alive; do sleep 2; done'
         
-        # Run error handling tests
-        export PYTHONPATH="${PYTHONPATH}:src"
-        python -m pytest tests/integration/test_scenarios.py::TestErrorHandlingScenarios -v
+        # Run error handling tests inside container with proper environment
+        docker compose -f docker/docker-compose.test-full.yml run --rm test_runner python -m pytest tests/integration/test_scenarios.py::TestErrorHandlingScenarios -v
         
         # Clean up
         docker compose -f docker/docker-compose.test-full.yml down -v
