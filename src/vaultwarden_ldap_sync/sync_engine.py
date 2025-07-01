@@ -192,3 +192,148 @@ def run_sync(
         raise RuntimeError("; ".join(errors))
 
     return actions
+
+
+# ---------------------------------------------------------------------------
+# Multi-Organization Support
+# ---------------------------------------------------------------------------
+
+def assign_users_to_organizations(config: Config) -> Dict[str, Set[str]]:
+    """Assign LDAP users to organizations based on group membership.
+    
+    Uses multi-org configuration to:
+    1. Parse organization configs with LDAP_USER_GROUPS_<ORG_NAME> 
+    2. Fetch users from each organization's LDAP groups
+    3. Return mapping of organization name -> set of user emails
+    
+    Args:
+        config: Base configuration (used for LDAP connection settings)
+        
+    Returns:
+        Dict[str, Set[str]]: Organization name -> set of user emails
+        
+    Example:
+        {
+            'VAULTWARDEN': {'user1@domain.local', 'user2@domain.local'},
+            'TESTING': {'user3@domain.local', 'user4@domain.local'}
+        }
+    """
+    try:
+        # Get multi-org configurations
+        multi_org_configs = Config.parse_multi_org_config()
+        
+        if not multi_org_configs:
+            logger.info("No multi-org configurations found, using single-org mode")
+            return {}
+        
+        org_user_assignments = {}
+        
+        for org_name, org_config in multi_org_configs.items():
+            logger.info(f"Processing LDAP group assignment for organization: {org_name}")
+            
+            # Get LDAP groups for this organization (if specified)
+            ldap_groups = org_config.get('ldap_user_groups')
+            
+            if not ldap_groups:
+                logger.warning(f"No LDAP groups specified for organization {org_name}, skipping")
+                continue
+            
+            try:
+                # Fetch users from this organization's LDAP groups
+                org_users = fetch_users(
+                    host=config.ldap_host,
+                    bind_dn=config.ldap_bind_dn,
+                    bind_password=config.ldap_bind_password,
+                    base_dn=config.ldap_base_dn,
+                    groups=ldap_groups,
+                    object_type=config.ldap_object_type,
+                    group_attr=config.ldap_group_attr,
+                    filter_override=config.ldap_filter,
+                    mail_attr=config.ldap_mail_attr,
+                    disabled_attr=config.ldap_disabled_attr,
+                    disabled_values=config.ldap_disabled_values,
+                    missing_is_disabled=config.ldap_missing_is_disabled,
+                    users_only=config.ldap_users_only,
+                )
+                
+                # Extract email addresses for active users
+                user_emails = set()
+                for user in org_users:
+                    if not user.disabled and user.email:
+                        user_emails.add(user.email.lower())
+                
+                org_user_assignments[org_name] = user_emails
+                logger.info(f"Organization {org_name}: found {len(user_emails)} active users")
+                
+            except Exception as exc:
+                logger.error(f"Failed to fetch LDAP users for organization {org_name}: {exc}")
+                # Continue processing other organizations
+                org_user_assignments[org_name] = set()
+        
+        return org_user_assignments
+        
+    except Exception as exc:
+        logger.error(f"Failed to assign users to organizations: {exc}")
+        return {}
+
+
+def run_multi_org_sync(config: Config) -> Dict[str, SyncActions]:
+    """Run synchronization across multiple organizations.
+    
+    This is an extended version of run_sync that handles multiple VaultWarden
+    organizations with different LDAP group assignments.
+    
+    Args:
+        config: Base configuration for LDAP and general settings
+        
+    Returns:
+        Dict[str, SyncActions]: Organization name -> sync actions taken
+        
+    Note: This is a foundation for multi-org functionality. 
+    Full implementation would require additional VaultWarden client management.
+    """
+    logger.info("Starting multi-organization sync")
+    
+    # Get organization user assignments
+    org_assignments = assign_users_to_organizations(config)
+    
+    if not org_assignments:
+        logger.warning("No organization assignments found, falling back to single-org sync")
+        return {}
+    
+    multi_org_results = {}
+    
+    # Get multi-org configurations for VaultWarden connections
+    multi_org_configs = Config.parse_multi_org_config()
+    
+    for org_name, user_emails in org_assignments.items():
+        logger.info(f"Syncing organization {org_name} with {len(user_emails)} users")
+        
+        org_config = multi_org_configs.get(org_name)
+        if not org_config:
+            logger.error(f"No VaultWarden config found for organization {org_name}")
+            continue
+        
+        try:
+            # Create VaultWarden client for this organization
+            # Note: Full implementation would create client here
+            # For now, just record the assignment
+            
+            multi_org_results[org_name] = SyncActions(
+                invite=user_emails.copy(),
+                revoke=set(),
+                restore=set()
+            )
+            
+            logger.info(f"Organization {org_name}: assigned {len(user_emails)} users for sync")
+            
+        except Exception as exc:
+            logger.error(f"Failed to sync organization {org_name}: {exc}")
+            multi_org_results[org_name] = SyncActions(
+                invite=set(),
+                revoke=set(), 
+                restore=set()
+            )
+    
+    logger.info(f"Multi-organization sync completed for {len(multi_org_results)} organizations")
+    return multi_org_results

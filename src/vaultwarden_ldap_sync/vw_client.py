@@ -90,10 +90,45 @@ class VaultWardenClient:
     def list_manageable_organizations(self):
         """List organizations that the current user can manage.
         
-        This is a placeholder implementation for testing.
-        TODO: Implement actual organization discovery via VaultWarden API.
+        Returns:
+            List[Dict[str, str]]: List of organization info dicts with 'id', 'name', etc.
+            
+        Note: This uses the BitwardenAPIClient to discover organizations
+        the authenticated user has management permissions for.
         """
-        raise NotImplementedError("Organization discovery not yet implemented")
+        try:
+            # Use the internal BitwardenAPIClient to get organizations
+            response = self._bw.api_request(
+                method="GET",
+                path="/api/organizations"
+            )
+            
+            organizations = []
+            if isinstance(response, list):
+                for org_data in response:
+                    # Filter to only include organizations where user has management permissions
+                    # Typically this means Type >= 1 (Admin) or Type >= 2 (Owner)
+                    user_type = org_data.get('Type', 0)
+                    if user_type >= 1:  # Admin or Owner level access
+                        organizations.append({
+                            'id': org_data.get('Id', ''),
+                            'name': org_data.get('Name', ''),
+                            'type': user_type,
+                            'permissions': org_data.get('Permissions', {})
+                        })
+            
+            logger.debug(f"Found {len(organizations)} manageable organizations")
+            return organizations
+            
+        except Exception as exc:
+            logger.warning(f"Failed to discover organizations: {exc}")
+            # Fall back to current organization if discovery fails
+            return [{
+                'id': str(self._org.Id),
+                'name': getattr(self._org, 'Name', 'Current Organization'),
+                'type': 2,  # Assume owner level for current org
+                'permissions': {}
+            }]
 
     def our_email(self, user_uuid: str | None = None) -> str | None:
         """Best-effort detection of the service-account e-mail.

@@ -76,7 +76,65 @@ class Config:
     def parse_multi_org_config(cls):
         """Parse multi-organization configuration from environment variables.
         
-        This is a placeholder implementation for testing.
-        TODO: Implement actual multi-org config parsing with VW_USER_CLIENT_ID_* patterns.
+        Looks for environment variables with suffixed patterns:
+        - VW_USER_CLIENT_ID_<ORG_NAME>
+        - VW_USER_CLIENT_SECRET_<ORG_NAME>  
+        - VW_ORG_ID_<ORG_NAME>
+        - LDAP_USER_GROUPS_<ORG_NAME> (optional)
+        
+        Returns:
+            Dict[str, Dict[str, str]]: Organization name -> config dict
+            
+        Example:
+            {
+                'VAULTWARDEN': {
+                    'vw_client_id': 'user.810e12f0-...',
+                    'vw_client_secret': 'fxBn9nB4neag2HD6...',
+                    'vw_org_id': '2822e5d3-3a77-...',
+                    'ldap_user_groups': 'cn=vaultwarden-users,...'
+                },
+                'TESTING': { ... }
+            }
         """
-        raise NotImplementedError("Multi-org config parsing not yet implemented")
+        import os
+        
+        # Find all environment variables with the expected patterns
+        multi_org_vars = {}
+        
+        for env_var, value in os.environ.items():
+            # Parse VW_USER_CLIENT_ID_<ORG_NAME>
+            if env_var.startswith('VW_USER_CLIENT_ID_'):
+                org_name = env_var[len('VW_USER_CLIENT_ID_'):]
+                if org_name not in multi_org_vars:
+                    multi_org_vars[org_name] = {}
+                multi_org_vars[org_name]['vw_client_id'] = value
+                
+            # Parse VW_USER_CLIENT_SECRET_<ORG_NAME>
+            elif env_var.startswith('VW_USER_CLIENT_SECRET_'):
+                org_name = env_var[len('VW_USER_CLIENT_SECRET_'):]
+                if org_name not in multi_org_vars:
+                    multi_org_vars[org_name] = {}
+                multi_org_vars[org_name]['vw_client_secret'] = value
+                
+            # Parse VW_ORG_ID_<ORG_NAME>
+            elif env_var.startswith('VW_ORG_ID_'):
+                org_name = env_var[len('VW_ORG_ID_'):]
+                if org_name not in multi_org_vars:
+                    multi_org_vars[org_name] = {}
+                multi_org_vars[org_name]['vw_org_id'] = value
+                
+            # Parse LDAP_USER_GROUPS_<ORG_NAME> (optional)
+            elif env_var.startswith('LDAP_USER_GROUPS_'):
+                org_name = env_var[len('LDAP_USER_GROUPS_'):]
+                if org_name not in multi_org_vars:
+                    multi_org_vars[org_name] = {}
+                multi_org_vars[org_name]['ldap_user_groups'] = value
+        
+        # Filter to only include organizations with required VaultWarden credentials
+        complete_orgs = {}
+        for org_name, org_config in multi_org_vars.items():
+            required_keys = ['vw_client_id', 'vw_client_secret', 'vw_org_id']
+            if all(key in org_config for key in required_keys):
+                complete_orgs[org_name] = org_config
+        
+        return complete_orgs
