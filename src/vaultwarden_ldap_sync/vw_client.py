@@ -104,24 +104,76 @@ class VaultWardenClient:
     # Mutating operations – info logging should be done by caller
     # ------------------------------------------------------------------
     def invite(self, email: str) -> None:
-        self._org.invite(
-            email=email,
-            collections=[],
-            default_readonly=True,
-            default_hide_passwords=True,
-        )
+        try:
+            self._org.invite(
+                email=email,
+                collections=[],
+                default_readonly=True,
+                default_hide_passwords=True,
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to invite {email}: {exc}{response_details}') from exc
 
     def revoke(self, org_user_id: UUID) -> None:
-        self._bw.api_request(
-            method="PUT",
-            path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/revoke",
-        )
+        try:
+            self._bw.api_request(
+                method="PUT",
+                path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/revoke",
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to revoke user {org_user_id}: {exc}{response_details}') from exc
 
     def restore(self, org_user_id: UUID) -> None:
-        self._bw.api_request(
-            method="PUT",
-            path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/restore",
-        )
+        try:
+            self._bw.api_request(
+                method="PUT",
+                path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/restore",
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to restore user {org_user_id}: {exc}{response_details}') from exc
+
+    def _extract_http_error(self, exc: Exception) -> str:
+        """Extract HTTP response details from various exception types."""
+        details = []
+        
+        # Check for httpx.HTTPStatusError (most common)
+        if hasattr(exc, 'response'):
+            response = exc.response
+            try:
+                details.append(f' [HTTP {response.status_code}]')
+                if hasattr(response, 'text'):
+                    response_text = response.text.strip()
+                    if response_text:
+                        details.append(f' Response: {response_text}')
+                elif hasattr(response, 'content'):
+                    response_content = response.content.decode('utf-8', errors='ignore').strip()
+                    if response_content:
+                        details.append(f' Response: {response_content}')
+            except Exception:
+                details.append(' [Could not decode response]')
+        
+        # Check for requests-style exceptions
+        elif hasattr(exc, 'response') and exc.response is not None:
+            try:
+                response = exc.response
+                details.append(f' [HTTP {response.status_code}]')
+                if hasattr(response, 'text'):
+                    details.append(f' Response: {response.text}')
+            except Exception:
+                details.append(' [Could not decode response]')
+        
+        # Check if it's already a detailed error message
+        elif 'HTTP' in str(exc) and ('400' in str(exc) or '401' in str(exc) or '403' in str(exc) or '500' in str(exc)):
+            # Already has HTTP details, don't duplicate
+            pass
+        
+        return ''.join(details)
 
 
 # ---------------------------------------------------------------------------
