@@ -32,6 +32,8 @@ services:
       - SMTP_HOST=mailhog
       - SMTP_PORT=1025
       - SMTP_FROM=test@domain.local
+      - SMTP_SECURITY=off
+      - SMTP_AUTH_MECHANISM=Plain
       - DOMAIN=http://localhost:8080
       - LOG_LEVEL=debug
       - EXTENDED_LOGGING=true
@@ -39,6 +41,9 @@ services:
       - "8080:80"
     volumes:
       - vaultwarden-test-data:/data
+    depends_on:
+      mailhog:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/alive"]
       interval: 10s
@@ -55,6 +60,12 @@ services:
     ports:
       - "1025:1025"  # SMTP port
       - "8025:8025"  # Web UI port
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - test_network
 
