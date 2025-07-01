@@ -87,6 +87,14 @@ class VaultWardenClient:
         """Mapping *email → OrgUser* for quick lookups."""
         return {u.email.lower(): u for u in self.list_users(force)}
 
+    def list_manageable_organizations(self):
+        """List organizations that the current user can manage.
+        
+        This is a placeholder implementation for testing.
+        TODO: Implement actual organization discovery via VaultWarden API.
+        """
+        raise NotImplementedError("Organization discovery not yet implemented")
+
     def our_email(self, user_uuid: str | None = None) -> str | None:
         """Best-effort detection of the service-account e-mail.
 

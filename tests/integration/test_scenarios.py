@@ -127,13 +127,13 @@ class TestPrivilegeScenarios(IntegrationTestBase):
         
         try:
             self.vw_client.invite(test_email)
-            users = self.vw_client.list_users()
+            users = self.vw_client.user_map()
             
             # Find the test user
             test_user_id = None
-            for user_id, user in users.items():
+            for email, user in users.items():
                 if user.email == test_email:
-                    test_user_id = user_id
+                    test_user_id = user.id
                     break
             
             if test_user_id:
@@ -221,7 +221,13 @@ class TestErrorHandlingScenarios(IntegrationTestBase):
         os.environ['VW_USER_CLIENT_SECRET'] = 'invalid_secret'
         
         try:
-            invalid_client = VaultWardenClient()
+            invalid_client = VaultWardenClient(
+                url=self.config.vw_url,
+                client_id=self.config.vw_client_id,
+                client_secret='invalid_secret',  # Use invalid secret
+                org_id=self.config.vw_org_id,
+                ignore_cert=self.config.ignore_vw_cert
+            )
             with pytest.raises(Exception) as exc_info:
                 invalid_client.invite('test@domain.local')
             
@@ -264,7 +270,11 @@ class TestLdapUserStatusScenarios(IntegrationTestBase):
         
         # Other users should be enabled
         active_users = [u for u in users if not u.disabled]
-        assert len(active_users) >= 3, 'Should have at least 3 active users'
+        assert len(active_users) >= 2, 'Should have at least 2 active users (user, user2)'
+        
+        # Expected active users: user and user2 (user3 may not be in the test group)
+        active_emails = [u.email for u in active_users]
+        assert any('user@domain.local' in email for email in active_emails), 'user@domain.local should be active'
     
     def test_missing_disabled_attribute_behavior(self):
         """Test behavior when LDAP users lack disabled attribute."""
@@ -320,7 +330,7 @@ class TestFullSyncScenarios(IntegrationTestBase):
         vw_users = self.vw_client.list_users()
         expected_emails = {'user@domain.local', 'user2@domain.local'}  # user4 disabled, user3 not in group
         
-        invited_emails = {user.email for user in vw_users.values() if user.email in expected_emails}
+        invited_emails = {user.email for user in vw_users if user.email in expected_emails}
         assert expected_emails.issubset(invited_emails), f'Expected users should be invited: {expected_emails - invited_emails}'
     
     def test_sync_with_different_ldap_groups(self):

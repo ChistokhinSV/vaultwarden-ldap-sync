@@ -71,3 +71,12 @@ class Config:
         # strip prefixes from org id if present
         if self.vw_org_id.startswith('organization.'):
             self.vw_org_id = self.vw_org_id.split('.')[1]
+
+    @classmethod
+    def parse_multi_org_config(cls):
+        """Parse multi-organization configuration from environment variables.
+        
+        This is a placeholder implementation for testing.
+        TODO: Implement actual multi-org config parsing with VW_USER_CLIENT_ID_* patterns.
+        """
+        raise NotImplementedError("Multi-org config parsing not yet implemented")
