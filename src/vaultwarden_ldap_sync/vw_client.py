@@ -147,8 +147,17 @@ class VaultWardenClient:
             details.append(f' [HTTP {response.status_code}]')
             
             try:
-                # First try to parse as JSON (VaultWarden returns JSON errors)
+                # For httpx responses, we need to ensure content is read
+                # HTTPStatusError should already have the response body available
                 content_type = response.headers.get('content-type', '').lower()
+                
+                # Try to read the response if it's a streaming response
+                if hasattr(response, 'read') and not hasattr(response, '_content_consumed'):
+                    try:
+                        response.read()
+                    except Exception:
+                        pass  # Content might already be consumed
+                
                 if 'application/json' in content_type:
                     try:
                         error_data = response.json()
@@ -164,29 +173,33 @@ class VaultWardenClient:
                             details.append(f' Response: {error_data}')
                     except (ValueError, KeyError):
                         # JSON parsing failed, fall back to text
+                        try:
+                            response_text = response.text.strip()
+                            if response_text:
+                                details.append(f' Response: {response_text}')
+                            else:
+                                details.append(' [Empty JSON response]')
+                        except Exception:
+                            details.append(' [Could not read response text]')
+                else:
+                    # Non-JSON response, get as text
+                    try:
                         response_text = response.text.strip()
                         if response_text:
                             details.append(f' Response: {response_text}')
                         else:
-                            details.append(' [Empty JSON response]')
-                else:
-                    # Non-JSON response, get as text
-                    response_text = response.text.strip()
-                    if response_text:
-                        details.append(f' Response: {response_text}')
-                    else:
-                        details.append(' [Empty response body]')
+                            details.append(' [Empty response body]')
+                    except Exception:
+                        # If text access fails, try content
+                        try:
+                            response_content = response.content.decode('utf-8', errors='replace').strip()
+                            if response_content:
+                                details.append(f' Response: {response_content}')
+                            else:
+                                details.append(' [Empty response content]')
+                        except Exception as content_err:
+                            details.append(f' [Could not access response: {content_err}]')
                         
-            except (UnicodeDecodeError, AttributeError) as decode_err:
-                # If text decoding fails, try raw content
-                try:
-                    response_content = response.content.decode('utf-8', errors='replace').strip()
-                    if response_content:
-                        details.append(f' Response: {response_content}')
-                    else:
-                        details.append(f' [Empty response, decode error: {decode_err}]')
-                except Exception:
-                    details.append(' [Could not decode response content]')
             except Exception as general_err:
                 details.append(f' [Error accessing response: {general_err}]')
         
