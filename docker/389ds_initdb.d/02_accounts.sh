@@ -9,6 +9,13 @@ cn: vaultwarden-users
 objectclass: groupOfNames
 EOF
 
+echo "Adding Group vaultwarden-users-testing"
+ldapadd -D "cn=Directory Manager" -w ${DS_DM_PASSWORD} -H ldap://localhost:3389 -x <<EOF
+dn: cn=vvaultwarden-users-testing,cn=groups,cn=accounts,${DS_SUFFIX_NAME}
+cn: vaultwarden-users-testing
+objectclass: groupOfNames
+EOF
+
 echo "Adding Users user, user2, user3, user4"
 ldapadd -D "cn=Directory Manager" -w ${DS_DM_PASSWORD} -H ldap://localhost:3389 -x <<EOF
 dn: uid=user,cn=users,cn=accounts,${DS_SUFFIX_NAME}
@@ -48,6 +55,7 @@ sn: User3
 cn: User3
 mail: user3@domain.local
 userPassword: {CLEARTEXT}vaultwarden
+memberOf: cn=vaultwarden-users-testing,cn=groups,cn=accounts,${DS_SUFFIX_NAME}
 EOF
 
 
@@ -64,4 +72,5 @@ mail: user4@domain.local
 userPassword: {CLEARTEXT}vaultwarden
 nsAccountLock: TRUE
 memberOf: cn=vaultwarden-users,cn=groups,cn=accounts,${DS_SUFFIX_NAME}
+memberOf: cn=vaultwarden-users-testing,cn=groups,cn=accounts,${DS_SUFFIX_NAME}
 EOF
