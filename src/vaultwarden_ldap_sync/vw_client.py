@@ -147,58 +147,64 @@ class VaultWardenClient:
             details.append(f' [HTTP {response.status_code}]')
             
             try:
-                # For httpx responses, we need to ensure content is read
-                # HTTPStatusError should already have the response body available
-                content_type = response.headers.get('content-type', '').lower()
+                # For httpx streaming responses, we need to force content reading
+                # Use a more aggressive approach to read the response content
+                if hasattr(response, 'aread'):
+                    # It's an async response, we can't handle it in sync context
+                    details.append(' [Async response - content not accessible]')
+                    return ''.join(details)
                 
-                # Try to read the response if it's a streaming response
-                if hasattr(response, 'read') and not hasattr(response, '_content_consumed'):
-                    try:
-                        response.read()
-                    except Exception:
-                        pass  # Content might already be consumed
-                
-                if 'application/json' in content_type:
-                    try:
-                        error_data = response.json()
-                        # Extract the meaningful error message from VaultWarden's JSON structure
-                        if isinstance(error_data, dict):
-                            if 'message' in error_data:
-                                details.append(f' Response: {error_data["message"]}')
-                            elif 'errorModel' in error_data and isinstance(error_data['errorModel'], dict):
-                                details.append(f' Response: {error_data["errorModel"].get("message", error_data)}')
-                            else:
-                                details.append(f' Response: {error_data}')
+                # Try to force read the content using different approaches
+                content_bytes = None
+                try:
+                    # Method 1: Try to access _content directly if available
+                    if hasattr(response, '_content') and response._content is not None:
+                        content_bytes = response._content
+                    else:
+                        # Method 2: Try to read using iter_bytes and consume all
+                        if hasattr(response, 'iter_bytes'):
+                            content_bytes = b''.join(response.iter_bytes())
                         else:
-                            details.append(f' Response: {error_data}')
-                    except (ValueError, KeyError):
-                        # JSON parsing failed, fall back to text
-                        try:
-                            response_text = response.text.strip()
-                            if response_text:
-                                details.append(f' Response: {response_text}')
+                            # Method 3: Last resort - just mark as unable to read
+                            details.append(' [Unable to read streaming response content]')
+                            return ''.join(details)
+                except Exception:
+                    details.append(' [Failed to read response content]')
+                    return ''.join(details)
+                
+                # Now we have content_bytes, let's decode and parse it
+                if content_bytes:
+                    try:
+                        content_text = content_bytes.decode('utf-8', errors='replace').strip()
+                        if content_text:
+                            # Check if it looks like JSON
+                            content_type = response.headers.get('content-type', '').lower()
+                            if 'application/json' in content_type and content_text.startswith('{'):
+                                try:
+                                    import json
+                                    error_data = json.loads(content_text)
+                                    # Extract meaningful error message from VaultWarden's JSON structure
+                                    if isinstance(error_data, dict):
+                                        if 'message' in error_data:
+                                            details.append(f' Response: {error_data["message"]}')
+                                        elif 'errorModel' in error_data and isinstance(error_data['errorModel'], dict):
+                                            details.append(f' Response: {error_data["errorModel"].get("message", str(error_data))}')
+                                        else:
+                                            details.append(f' Response: {str(error_data)[:200]}')
+                                    else:
+                                        details.append(f' Response: {str(error_data)[:200]}')
+                                except (ValueError, json.JSONDecodeError):
+                                    # Not valid JSON, treat as text
+                                    details.append(f' Response: {content_text[:200]}')
                             else:
-                                details.append(' [Empty JSON response]')
-                        except Exception:
-                            details.append(' [Could not read response text]')
+                                # Non-JSON response
+                                details.append(f' Response: {content_text[:200]}')
+                        else:
+                            details.append(' [Empty response content]')
+                    except Exception as decode_err:
+                        details.append(f' [Content decode error: {decode_err}]')
                 else:
-                    # Non-JSON response, get as text
-                    try:
-                        response_text = response.text.strip()
-                        if response_text:
-                            details.append(f' Response: {response_text}')
-                        else:
-                            details.append(' [Empty response body]')
-                    except Exception:
-                        # If text access fails, try content
-                        try:
-                            response_content = response.content.decode('utf-8', errors='replace').strip()
-                            if response_content:
-                                details.append(f' Response: {response_content}')
-                            else:
-                                details.append(' [Empty response content]')
-                        except Exception as content_err:
-                            details.append(f' [Could not access response: {content_err}]')
+                    details.append(' [No response content]')
                         
             except Exception as general_err:
                 details.append(f' [Error accessing response: {general_err}]')
