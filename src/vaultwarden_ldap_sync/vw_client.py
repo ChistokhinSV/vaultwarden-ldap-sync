@@ -17,9 +17,14 @@ from dataclasses import dataclass
 import httpx
 from typing import Dict, List
 from uuid import UUID
+import asyncio
+import logging
 
 from vaultwarden.clients.bitwarden import BitwardenAPIClient as _BWClient
 from vaultwarden.models.bitwarden import Organization, get_organization
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -104,24 +109,172 @@ class VaultWardenClient:
     # Mutating operations – info logging should be done by caller
     # ------------------------------------------------------------------
     def invite(self, email: str) -> None:
-        self._org.invite(
-            email=email,
-            collections=[],
-            default_readonly=True,
-            default_hide_passwords=True,
-        )
+        try:
+            self._org.invite(
+                email=email,
+                collections=[],
+                default_readonly=True,
+                default_hide_passwords=True,
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to invite {email}: {exc}{response_details}') from exc
 
     def revoke(self, org_user_id: UUID) -> None:
-        self._bw.api_request(
-            method="PUT",
-            path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/revoke",
-        )
+        try:
+            self._bw.api_request(
+                method="PUT",
+                path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/revoke",
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to revoke user {org_user_id}: {exc}{response_details}') from exc
 
     def restore(self, org_user_id: UUID) -> None:
-        self._bw.api_request(
-            method="PUT",
-            path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/restore",
-        )
+        try:
+            self._bw.api_request(
+                method="PUT",
+                path=f"/api/organizations/{self._org.Id}/users/{org_user_id}/restore",
+            )
+        except Exception as exc:
+            # Try to extract HTTP response details if available
+            response_details = self._extract_http_error(exc)
+            raise Exception(f'Failed to restore user {org_user_id}: {exc}{response_details}') from exc
+
+    def _extract_http_error(self, exc: Exception) -> str:
+        """Extract HTTP response details from various exception types."""
+        details = []
+        
+        if hasattr(exc, 'response') and exc.response is not None:
+            response = exc.response
+            details.append(f' [HTTP {response.status_code}]')
+            
+            # Try to extract response body safely
+            response_body = self._safe_read_response_body(response)
+            if response_body:
+                details.append(f' Response: {response_body}')
+        
+        return ''.join(details)
+    
+    def _safe_read_response_body(self, response) -> str:
+        """Extract response body content from httpx response.
+        
+        The python-vaultwarden library uses httpx internally. When errors occur,
+        the response may be in streaming mode. The key insight is that we need to
+        iterate over the stream to consume it before it gets closed.
+        """
+        try:
+            # Strategy 1: Check if stream is available and not consumed
+            if hasattr(response, 'stream') and not response.is_stream_consumed:
+                try:
+                    # Iterate the stream to get chunks before it's closed
+                    chunks = list(response.stream)
+                    if chunks:
+                        content_bytes = b''.join(chunks)
+                        content_text = content_bytes.decode('utf-8', errors='replace')
+                        return self._parse_error_from_text(content_text)
+                except Exception as err:
+                    logger.debug("Stream iteration failed: %s", err)
+
+            # Strategy 2: Try standard response.read() - works if stream=False
+            try:
+                content_bytes = response.read()
+                if content_bytes:
+                    content_text = content_bytes.decode('utf-8', errors='replace')
+                    return self._parse_error_from_text(content_text)
+            except Exception as err:
+                logger.debug("response.read() failed: %s", err)
+
+            # Strategy 3: Try response.content (may work if already read)
+            try:
+                content_bytes = response.content
+                if content_bytes:
+                    content_text = content_bytes.decode('utf-8', errors='replace')
+                    return self._parse_error_from_text(content_text)
+            except Exception as err:
+                logger.debug("response.content failed: %s", err)
+
+            # Strategy 4: Try response.text (may work if already read)
+            try:
+                text = response.text
+                if text:
+                    return self._parse_error_from_text(text)
+            except Exception as err:
+                logger.debug("response.text failed: %s", err)
+
+            # Strategy 5: Try JSON extraction (may work if content is accessible)
+            json_ct = response.headers.get("content-type", "").lower()
+            if "application/json" in json_ct:
+                try:
+                    return self._extract_json_error_message(response)
+                except Exception as err:
+                    logger.debug("JSON extraction failed: %s", err)
+
+            return "[Response body could not be accessed]"
+        except Exception as e:
+            logger.debug("Unhandled error in _safe_read_response_body: %s", e)
+            return f"[Error reading response body: {type(e).__name__}]"
+    
+    def _parse_error_from_text(self, content_text: str) -> str:
+        """Parse error message from response text content."""
+        try:
+            # Try to parse as JSON first
+            if content_text.strip().startswith('{'):
+                import json
+                json_data = json.loads(content_text)
+                return self._extract_message_from_json(json_data)
+            else:
+                # Return plain text content (truncated if too long)
+                return content_text[:500] if len(content_text) <= 500 else content_text[:500] + '...'
+        except (json.JSONDecodeError, ValueError):
+            # Not valid JSON, return as text
+            return content_text[:500] if len(content_text) <= 500 else content_text[:500] + '...'
+    
+    def _extract_message_from_json(self, json_data) -> str:
+        """Extract the most relevant error message from VaultWarden's JSON structure."""
+        if isinstance(json_data, dict):
+            # Try to get the main error message
+            if 'message' in json_data and json_data['message']:
+                return json_data['message']
+            # Try to get nested error message from errorModel
+            elif 'errorModel' in json_data and isinstance(json_data['errorModel'], dict):
+                if 'message' in json_data['errorModel'] and json_data['errorModel']['message']:
+                    return json_data['errorModel']['message']
+            # Try to get validation errors
+            elif 'validationErrors' in json_data and isinstance(json_data['validationErrors'], dict):
+                errors = []
+                for field, field_errors in json_data['validationErrors'].items():
+                    if isinstance(field_errors, list):
+                        errors.extend(field_errors)
+                if errors:
+                    return '; '.join(errors)
+            # Fallback to entire JSON if structure is unexpected but looks informative
+            else:
+                json_str = str(json_data)
+                return json_str[:300] if len(json_str) <= 300 else json_str[:300] + '...'
+        return str(json_data)[:300]
+    
+    def _extract_json_error_message(self, response) -> str:
+        """Extract meaningful error message from VaultWarden JSON response."""
+        try:
+            json_data = response.json()
+            return self._extract_message_from_json(json_data)
+        except (ValueError, TypeError, AttributeError):
+            # JSON parsing failed, try text
+            pass
+        
+        # Fall back to text content
+        try:
+            if hasattr(response, 'text'):
+                text_content = response.text
+                if text_content:
+                    return text_content[:500] if len(text_content) <= 500 else text_content[:500] + '...'
+        except Exception:
+            pass
+            
+        return '[Could not extract response content]'
 
 
 # ---------------------------------------------------------------------------
