@@ -169,6 +169,16 @@ class VaultWardenClient:
         *httpx* versions.
         """
         try:
+            # Ensure the response body is actually downloaded.  With ``stream=True``
+            # *httpx* will defer reading until ``.read()`` is called.  Accessing
+            # ``response.content``/``text`` without that call raises
+            # `StreamConsumed`.  Calling ``read()`` multiple times is safe – the
+            # second call is a no-op and returns cached bytes.
+            try:
+                response.read()  # type: ignore[attr-defined]
+            except Exception as err:
+                logger.debug("response.read() failed or not needed: %s", err)
+
             # 1. JSON – this is what VaultWarden returns on errors
             json_ct = response.headers.get("content-type", "").lower()
             if "application/json" in json_ct:
