@@ -161,31 +161,55 @@ class VaultWardenClient:
     def _safe_read_response_body(self, response) -> str:
         """Safely read response body from httpx response, handling streaming responses."""
         try:
-            # Strategy 1: Check if response content is already available (non-streaming)
+            # Strategy 1: Try to access the raw response content via internal attributes
+            # httpx stores the response content in different places depending on how it was read
+            
+            # Check for already consumed content in httpx internal structures
             if hasattr(response, '_content') and response._content is not None:
-                return self._extract_json_error_message(response)
+                try:
+                    content_bytes = response._content
+                    content_text = content_bytes.decode('utf-8', errors='replace')
+                    return self._parse_error_from_text(content_text)
+                except Exception as e:
+                    logger.debug(f"Failed to decode _content: {e}")
             
-            # Strategy 2: Try to read the response if it's not already consumed
-            # This handles the case where httpx is in streaming mode but hasn't been read yet
-            try:
-                # For sync httpx responses, try to read the content
-                if hasattr(response, 'read') and not hasattr(response, '_content'):
-                    # This is a sync response that hasn't been read yet
-                    response.read()
-                    return self._extract_json_error_message(response)
-                
-                # For async responses, we can try to access content if it's available
-                # but we can't await in this sync context
-                if hasattr(response, 'content'):
-                    # Try direct content access - this works if already read
-                    return self._extract_json_error_message(response)
-                    
-            except (httpx.ResponseNotRead, RuntimeError) as e:
-                logger.debug(f"Could not read streaming response: {e}")
-                # This is expected for streaming responses that haven't been read
-                pass
+            # Strategy 2: Try to access the raw stream content directly
+            # Some httpx versions store content in _raw_stream
+            if hasattr(response, '_raw_stream') and response._raw_stream is not None:
+                try:
+                    # Try to read from the raw stream
+                    stream = response._raw_stream
+                    if hasattr(stream, '_buffer') and stream._buffer:
+                        content_bytes = stream._buffer
+                        content_text = content_bytes.decode('utf-8', errors='replace')
+                        return self._parse_error_from_text(content_text)
+                except Exception as e:
+                    logger.debug(f"Failed to read from _raw_stream: {e}")
             
-            # Strategy 3: If we can't read the response safely, provide helpful info
+            # Strategy 3: Try to force-consume the iterator if available
+            if hasattr(response, '_content_consumed') and not response._content_consumed:
+                try:
+                    # Force reading by consuming the iterator manually
+                    if hasattr(response, 'iter_bytes'):
+                        content_bytes = b''.join(response.iter_bytes())
+                        content_text = content_bytes.decode('utf-8', errors='replace')
+                        return self._parse_error_from_text(content_text)
+                except Exception as e:
+                    logger.debug(f"Failed to consume iterator: {e}")
+            
+            # Strategy 4: Check if response has a _decoder with content
+            if hasattr(response, '_decoder') and response._decoder is not None:
+                try:
+                    decoder = response._decoder
+                    if hasattr(decoder, 'flush'):
+                        content_bytes = decoder.flush()
+                        if content_bytes:
+                            content_text = content_bytes.decode('utf-8', errors='replace')
+                            return self._parse_error_from_text(content_text)
+                except Exception as e:
+                    logger.debug(f"Failed to read from decoder: {e}")
+            
+            # If all strategies fail, provide helpful info
             content_type = getattr(response, 'headers', {}).get('content-type', 'unknown')
             return f'[Response body not accessible - streaming response, Content-Type: {content_type}]'
             
@@ -193,34 +217,50 @@ class VaultWardenClient:
             logger.debug(f"Error in _safe_read_response_body: {e}")
             return f'[Error reading response body: {type(e).__name__}]'
     
+    def _parse_error_from_text(self, content_text: str) -> str:
+        """Parse error message from response text content."""
+        try:
+            # Try to parse as JSON first
+            if content_text.strip().startswith('{'):
+                import json
+                json_data = json.loads(content_text)
+                return self._extract_message_from_json(json_data)
+            else:
+                # Return plain text content (truncated if too long)
+                return content_text[:500] if len(content_text) <= 500 else content_text[:500] + '...'
+        except (json.JSONDecodeError, ValueError):
+            # Not valid JSON, return as text
+            return content_text[:500] if len(content_text) <= 500 else content_text[:500] + '...'
+    
+    def _extract_message_from_json(self, json_data) -> str:
+        """Extract the most relevant error message from VaultWarden's JSON structure."""
+        if isinstance(json_data, dict):
+            # Try to get the main error message
+            if 'message' in json_data and json_data['message']:
+                return json_data['message']
+            # Try to get nested error message from errorModel
+            elif 'errorModel' in json_data and isinstance(json_data['errorModel'], dict):
+                if 'message' in json_data['errorModel'] and json_data['errorModel']['message']:
+                    return json_data['errorModel']['message']
+            # Try to get validation errors
+            elif 'validationErrors' in json_data and isinstance(json_data['validationErrors'], dict):
+                errors = []
+                for field, field_errors in json_data['validationErrors'].items():
+                    if isinstance(field_errors, list):
+                        errors.extend(field_errors)
+                if errors:
+                    return '; '.join(errors)
+            # Fallback to entire JSON if structure is unexpected but looks informative
+            else:
+                json_str = str(json_data)
+                return json_str[:300] if len(json_str) <= 300 else json_str[:300] + '...'
+        return str(json_data)[:300]
+    
     def _extract_json_error_message(self, response) -> str:
         """Extract meaningful error message from VaultWarden JSON response."""
         try:
             json_data = response.json()
-            # Extract the most relevant error message from VaultWarden's JSON structure
-            if isinstance(json_data, dict):
-                # Try to get the main error message
-                if 'message' in json_data and json_data['message']:
-                    return json_data['message']
-                # Try to get nested error message from errorModel
-                elif 'errorModel' in json_data and isinstance(json_data['errorModel'], dict):
-                    if 'message' in json_data['errorModel'] and json_data['errorModel']['message']:
-                        return json_data['errorModel']['message']
-                # Try to get validation errors
-                elif 'validationErrors' in json_data and isinstance(json_data['validationErrors'], dict):
-                    errors = []
-                    for field, field_errors in json_data['validationErrors'].items():
-                        if isinstance(field_errors, list):
-                            errors.extend(field_errors)
-                    if errors:
-                        return '; '.join(errors)
-                # Fallback to entire JSON if structure is unexpected but looks informative
-                else:
-                    json_str = str(json_data)
-                    if len(json_str) < 500:  # Reasonable length
-                        return json_str
-                    else:
-                        return '[Complex JSON response - check server logs]'
+            return self._extract_message_from_json(json_data)
         except (ValueError, TypeError, AttributeError):
             # JSON parsing failed, try text
             pass
@@ -229,8 +269,8 @@ class VaultWardenClient:
         try:
             if hasattr(response, 'text'):
                 text_content = response.text
-                if text_content and len(text_content) < 1000:  # Limit length for logging
-                    return text_content
+                if text_content:
+                    return text_content[:500] if len(text_content) <= 500 else text_content[:500] + '...'
         except Exception:
             pass
             
