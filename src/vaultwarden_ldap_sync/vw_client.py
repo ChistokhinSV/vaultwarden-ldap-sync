@@ -142,36 +142,53 @@ class VaultWardenClient:
         """Extract HTTP response details from various exception types."""
         details = []
         
-        # Check for httpx.HTTPStatusError (most common)
-        if hasattr(exc, 'response'):
+        if hasattr(exc, 'response') and exc.response is not None:
             response = exc.response
+            details.append(f' [HTTP {response.status_code}]')
+            
             try:
-                details.append(f' [HTTP {response.status_code}]')
-                if hasattr(response, 'text'):
+                # First try to parse as JSON (VaultWarden returns JSON errors)
+                content_type = response.headers.get('content-type', '').lower()
+                if 'application/json' in content_type:
+                    try:
+                        error_data = response.json()
+                        # Extract the meaningful error message from VaultWarden's JSON structure
+                        if isinstance(error_data, dict):
+                            if 'message' in error_data:
+                                details.append(f' Response: {error_data["message"]}')
+                            elif 'errorModel' in error_data and isinstance(error_data['errorModel'], dict):
+                                details.append(f' Response: {error_data["errorModel"].get("message", error_data)}')
+                            else:
+                                details.append(f' Response: {error_data}')
+                        else:
+                            details.append(f' Response: {error_data}')
+                    except (ValueError, KeyError):
+                        # JSON parsing failed, fall back to text
+                        response_text = response.text.strip()
+                        if response_text:
+                            details.append(f' Response: {response_text}')
+                        else:
+                            details.append(' [Empty JSON response]')
+                else:
+                    # Non-JSON response, get as text
                     response_text = response.text.strip()
                     if response_text:
                         details.append(f' Response: {response_text}')
-                elif hasattr(response, 'content'):
-                    response_content = response.content.decode('utf-8', errors='ignore').strip()
+                    else:
+                        details.append(' [Empty response body]')
+                        
+            except (UnicodeDecodeError, AttributeError) as decode_err:
+                # If text decoding fails, try raw content
+                try:
+                    response_content = response.content.decode('utf-8', errors='replace').strip()
                     if response_content:
                         details.append(f' Response: {response_content}')
-            except Exception:
-                details.append(' [Could not decode response]')
-        
-        # Check for requests-style exceptions
-        elif hasattr(exc, 'response') and exc.response is not None:
-            try:
-                response = exc.response
-                details.append(f' [HTTP {response.status_code}]')
-                if hasattr(response, 'text'):
-                    details.append(f' Response: {response.text}')
-            except Exception:
-                details.append(' [Could not decode response]')
-        
-        # Check if it's already a detailed error message
-        elif 'HTTP' in str(exc) and ('400' in str(exc) or '401' in str(exc) or '403' in str(exc) or '500' in str(exc)):
-            # Already has HTTP details, don't duplicate
-            pass
+                    else:
+                        details.append(f' [Empty response, decode error: {decode_err}]')
+                except Exception:
+                    details.append(' [Could not decode response content]')
+            except Exception as general_err:
+                details.append(f' [Error accessing response: {general_err}]')
         
         return ''.join(details)
 
