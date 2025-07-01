@@ -199,47 +199,47 @@ def run_sync(
 # ---------------------------------------------------------------------------
 
 def assign_users_to_organizations(config: Config) -> Dict[str, Set[str]]:
-    """Assign LDAP users to organizations based on group membership.
+    """Assign LDAP users to organizations based on inheritance-based configuration.
     
-    Uses multi-org configuration to:
-    1. Parse organization configs with LDAP_USER_GROUPS_<ORG_NAME> 
-    2. Fetch users from each organization's LDAP groups
-    3. Return mapping of organization name -> set of user emails
+    Uses numbered multi-org configurations (_1, _2, etc.) that inherit from base config.
+    Each configuration specifies which LDAP groups to sync to which VaultWarden org.
     
     Args:
         config: Base configuration (used for LDAP connection settings)
         
     Returns:
-        Dict[str, Set[str]]: Organization name -> set of user emails
+        Dict[str, Set[str]]: Config identifier -> set of user emails
         
-    Example:
-        {
-            'VAULTWARDEN': {'user1@domain.local', 'user2@domain.local'},
-            'TESTING': {'user3@domain.local', 'user4@domain.local'}
+    Example with inheritance:
+        # Base: VW_ORG_ID=org1, LDAP_USER_GROUPS=cn=users1
+        # _2: VW_ORG_ID_2=org2, LDAP_USER_GROUPS_2=cn=users2  
+        Result: {
+            'base': {'user1@domain.local', 'user2@domain.local'},  # cn=users1 -> org1
+            '2': {'user3@domain.local', 'user4@domain.local'}      # cn=users2 -> org2
         }
     """
     try:
-        # Get multi-org configurations
+        # Get inheritance-based multi-org configurations
         multi_org_configs = Config.parse_multi_org_config()
         
         if not multi_org_configs:
             logger.info("No multi-org configurations found, using single-org mode")
             return {}
         
-        org_user_assignments = {}
+        config_user_assignments = {}
         
-        for org_name, org_config in multi_org_configs.items():
-            logger.info(f"Processing LDAP group assignment for organization: {org_name}")
+        for config_id, org_config in multi_org_configs.items():
+            logger.info(f"Processing LDAP group assignment for config '{config_id}' (org: {org_config.get('vw_org_id', 'unknown')})")
             
-            # Get LDAP groups for this organization (if specified)
+            # Get LDAP groups for this configuration
             ldap_groups = org_config.get('ldap_user_groups')
             
             if not ldap_groups:
-                logger.warning(f"No LDAP groups specified for organization {org_name}, skipping")
+                logger.warning(f"No LDAP groups specified for config '{config_id}', skipping")
                 continue
             
             try:
-                # Fetch users from this organization's LDAP groups
+                # Fetch users from this configuration's LDAP groups
                 org_users = fetch_users(
                     host=config.ldap_host,
                     bind_dn=config.ldap_bind_dn,
@@ -262,15 +262,15 @@ def assign_users_to_organizations(config: Config) -> Dict[str, Set[str]]:
                     if not user.disabled and user.email:
                         user_emails.add(user.email.lower())
                 
-                org_user_assignments[org_name] = user_emails
-                logger.info(f"Organization {org_name}: found {len(user_emails)} active users")
+                config_user_assignments[config_id] = user_emails
+                logger.info(f"Config '{config_id}' (org: {org_config.get('vw_org_id')}): found {len(user_emails)} active users")
                 
             except Exception as exc:
-                logger.error(f"Failed to fetch LDAP users for organization {org_name}: {exc}")
-                # Continue processing other organizations
-                org_user_assignments[org_name] = set()
+                logger.error(f"Failed to fetch LDAP users for config '{config_id}': {exc}")
+                # Continue processing other configurations
+                config_user_assignments[config_id] = set()
         
-        return org_user_assignments
+        return config_user_assignments
         
     except Exception as exc:
         logger.error(f"Failed to assign users to organizations: {exc}")

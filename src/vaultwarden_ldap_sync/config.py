@@ -74,67 +74,97 @@ class Config:
 
     @classmethod
     def parse_multi_org_config(cls):
-        """Parse multi-organization configuration from environment variables.
+        """Parse multi-organization configuration with inheritance from base config.
         
-        Looks for environment variables with suffixed patterns:
-        - VW_USER_CLIENT_ID_<ORG_NAME>
-        - VW_USER_CLIENT_SECRET_<ORG_NAME>  
-        - VW_ORG_ID_<ORG_NAME>
-        - LDAP_USER_GROUPS_<ORG_NAME> (optional)
+        Configuration inheritance model:
+        1. Base config (no suffix) provides defaults for all settings
+        2. Numbered configs (_1, _2, etc.) inherit base and override specifics
+        3. Each complete config must have vw_org_id and ldap_user_groups to be valid
+        4. Missing required fields = skip that configuration
+        
+        Environment variables:
+        - Base: VW_ORG_ID, VW_USER_CLIENT_ID, VW_USER_CLIENT_SECRET, LDAP_USER_GROUPS
+        - Derived: VW_ORG_ID_1, VW_USER_CLIENT_ID_2, LDAP_USER_GROUPS_3, etc.
         
         Returns:
-            Dict[str, Dict[str, str]]: Organization name -> config dict
+            Dict[str, Dict[str, str]]: Config identifier -> complete config dict
             
-        Example:
-            {
-                'VAULTWARDEN': {
-                    'vw_client_id': 'user.810e12f0-...',
-                    'vw_client_secret': 'fxBn9nB4neag2HD6...',
-                    'vw_org_id': '2822e5d3-3a77-...',
-                    'ldap_user_groups': 'cn=vaultwarden-users,...'
-                },
-                'TESTING': { ... }
+        Examples:
+            # Same client, different orgs and groups
+            VW_ORG_ID=org1
+            VW_USER_CLIENT_ID=client1
+            VW_USER_CLIENT_SECRET=secret1
+            LDAP_USER_GROUPS=cn=users1,dc=domain
+            VW_ORG_ID_2=org2
+            LDAP_USER_GROUPS_2=cn=users2,dc=domain
+            
+            Result: {
+                'base': {'vw_org_id': 'org1', 'vw_client_id': 'client1', ...},
+                '2': {'vw_org_id': 'org2', 'vw_client_id': 'client1', 'ldap_user_groups': 'cn=users2,dc=domain', ...}
             }
         """
         import os
         
-        # Find all environment variables with the expected patterns
-        multi_org_vars = {}
+        # Get base configuration (no suffix)
+        base_config = {
+            'vw_org_id': os.getenv('VW_ORG_ID', ''),
+            'vw_client_id': os.getenv('VW_USER_CLIENT_ID', ''),
+            'vw_client_secret': os.getenv('VW_USER_CLIENT_SECRET', ''),
+            'ldap_user_groups': os.getenv('LDAP_USER_GROUPS', ''),
+            'vw_url': os.getenv('VW_URL', cls().vw_url),  # Use default from Config class
+            'ignore_vw_cert': os.getenv('IGNORE_VW_CERT', ''),
+        }
         
-        for env_var, value in os.environ.items():
-            # Parse VW_USER_CLIENT_ID_<ORG_NAME>
-            if env_var.startswith('VW_USER_CLIENT_ID_'):
-                org_name = env_var[len('VW_USER_CLIENT_ID_'):]
-                if org_name not in multi_org_vars:
-                    multi_org_vars[org_name] = {}
-                multi_org_vars[org_name]['vw_client_id'] = value
-                
-            # Parse VW_USER_CLIENT_SECRET_<ORG_NAME>
-            elif env_var.startswith('VW_USER_CLIENT_SECRET_'):
-                org_name = env_var[len('VW_USER_CLIENT_SECRET_'):]
-                if org_name not in multi_org_vars:
-                    multi_org_vars[org_name] = {}
-                multi_org_vars[org_name]['vw_client_secret'] = value
-                
-            # Parse VW_ORG_ID_<ORG_NAME>
-            elif env_var.startswith('VW_ORG_ID_'):
-                org_name = env_var[len('VW_ORG_ID_'):]
-                if org_name not in multi_org_vars:
-                    multi_org_vars[org_name] = {}
-                multi_org_vars[org_name]['vw_org_id'] = value
-                
-            # Parse LDAP_USER_GROUPS_<ORG_NAME> (optional)
-            elif env_var.startswith('LDAP_USER_GROUPS_'):
-                org_name = env_var[len('LDAP_USER_GROUPS_'):]
-                if org_name not in multi_org_vars:
-                    multi_org_vars[org_name] = {}
-                multi_org_vars[org_name]['ldap_user_groups'] = value
+        # Find all numbered suffixes in environment variables
+        suffixes = set()
+        for env_var in os.environ.keys():
+            for prefix in ['VW_ORG_ID_', 'VW_USER_CLIENT_ID_', 'VW_USER_CLIENT_SECRET_', 'LDAP_USER_GROUPS_']:
+                if env_var.startswith(prefix):
+                    suffix = env_var[len(prefix):]
+                    # Only accept numeric suffixes (1, 2, 3, etc.)
+                    if suffix.isdigit():
+                        suffixes.add(suffix)
         
-        # Filter to only include organizations with required VaultWarden credentials
-        complete_orgs = {}
-        for org_name, org_config in multi_org_vars.items():
-            required_keys = ['vw_client_id', 'vw_client_secret', 'vw_org_id']
-            if all(key in org_config for key in required_keys):
-                complete_orgs[org_name] = org_config
+        # Build complete configurations with inheritance
+        complete_configs = {}
         
-        return complete_orgs
+        # Add base config if it has required fields
+        if base_config['vw_org_id'] and base_config['ldap_user_groups']:
+            complete_configs['base'] = base_config.copy()
+        
+        # Process each numbered suffix
+        for suffix in sorted(suffixes):
+            # Start with base config and override with suffix-specific values
+            derived_config = base_config.copy()
+            
+            # Override with suffix-specific values if they exist
+            suffix_overrides = {
+                'vw_org_id': os.getenv(f'VW_ORG_ID_{suffix}'),
+                'vw_client_id': os.getenv(f'VW_USER_CLIENT_ID_{suffix}'),
+                'vw_client_secret': os.getenv(f'VW_USER_CLIENT_SECRET_{suffix}'),
+                'ldap_user_groups': os.getenv(f'LDAP_USER_GROUPS_{suffix}'),
+                'vw_url': os.getenv(f'VW_URL_{suffix}'),
+                'ignore_vw_cert': os.getenv(f'IGNORE_VW_CERT_{suffix}'),
+            }
+            
+            # Apply non-empty overrides
+            for key, value in suffix_overrides.items():
+                if value:  # Only override if the value is not empty
+                    derived_config[key] = value
+            
+            # Check if this configuration is complete and valid
+            required_fields = ['vw_org_id', 'ldap_user_groups']
+            if all(derived_config.get(field) for field in required_fields):
+                # Also need at least client credentials for VaultWarden access
+                if derived_config.get('vw_client_id') and derived_config.get('vw_client_secret'):
+                    complete_configs[suffix] = derived_config
+                else:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Config block '{suffix}' missing VaultWarden credentials, skipping")
+            else:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Config block '{suffix}' missing required fields {required_fields}, skipping")
+        
+        return complete_configs
