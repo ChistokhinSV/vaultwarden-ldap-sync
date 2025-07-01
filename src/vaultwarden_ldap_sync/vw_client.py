@@ -17,9 +17,14 @@ from dataclasses import dataclass
 import httpx
 from typing import Dict, List
 from uuid import UUID
+import asyncio
+import logging
 
 from vaultwarden.clients.bitwarden import BitwardenAPIClient as _BWClient
 from vaultwarden.models.bitwarden import Organization, get_organization
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -146,15 +151,90 @@ class VaultWardenClient:
             response = exc.response
             details.append(f' [HTTP {response.status_code}]')
             
-            # For HTTP 400 responses (which are likely SMTP errors), provide helpful context
-            if response.status_code == 400:
-                details.append(' [Likely SMTP configuration error - check VaultWarden logs for detailed SMTP error messages]')
-            
-            # Since httpx async responses are not accessible in sync context,
-            # we'll provide the HTTP status and a helpful message instead of trying to read the body
-            details.append(' [Response body not accessible due to async httpx client - check server logs for details]')
+            # Try to extract response body safely
+            response_body = self._safe_read_response_body(response)
+            if response_body:
+                details.append(f' Response: {response_body}')
         
         return ''.join(details)
+    
+    def _safe_read_response_body(self, response) -> str:
+        """Safely read response body from httpx response, handling streaming responses."""
+        try:
+            # Strategy 1: Check if response content is already available (non-streaming)
+            if hasattr(response, '_content') and response._content is not None:
+                return self._extract_json_error_message(response)
+            
+            # Strategy 2: Try to read the response if it's not already consumed
+            # This handles the case where httpx is in streaming mode but hasn't been read yet
+            try:
+                # For sync httpx responses, try to read the content
+                if hasattr(response, 'read') and not hasattr(response, '_content'):
+                    # This is a sync response that hasn't been read yet
+                    response.read()
+                    return self._extract_json_error_message(response)
+                
+                # For async responses, we can try to access content if it's available
+                # but we can't await in this sync context
+                if hasattr(response, 'content'):
+                    # Try direct content access - this works if already read
+                    return self._extract_json_error_message(response)
+                    
+            except (httpx.ResponseNotRead, RuntimeError) as e:
+                logger.debug(f"Could not read streaming response: {e}")
+                # This is expected for streaming responses that haven't been read
+                pass
+            
+            # Strategy 3: If we can't read the response safely, provide helpful info
+            content_type = getattr(response, 'headers', {}).get('content-type', 'unknown')
+            return f'[Response body not accessible - streaming response, Content-Type: {content_type}]'
+            
+        except Exception as e:
+            logger.debug(f"Error in _safe_read_response_body: {e}")
+            return f'[Error reading response body: {type(e).__name__}]'
+    
+    def _extract_json_error_message(self, response) -> str:
+        """Extract meaningful error message from VaultWarden JSON response."""
+        try:
+            json_data = response.json()
+            # Extract the most relevant error message from VaultWarden's JSON structure
+            if isinstance(json_data, dict):
+                # Try to get the main error message
+                if 'message' in json_data and json_data['message']:
+                    return json_data['message']
+                # Try to get nested error message from errorModel
+                elif 'errorModel' in json_data and isinstance(json_data['errorModel'], dict):
+                    if 'message' in json_data['errorModel'] and json_data['errorModel']['message']:
+                        return json_data['errorModel']['message']
+                # Try to get validation errors
+                elif 'validationErrors' in json_data and isinstance(json_data['validationErrors'], dict):
+                    errors = []
+                    for field, field_errors in json_data['validationErrors'].items():
+                        if isinstance(field_errors, list):
+                            errors.extend(field_errors)
+                    if errors:
+                        return '; '.join(errors)
+                # Fallback to entire JSON if structure is unexpected but looks informative
+                else:
+                    json_str = str(json_data)
+                    if len(json_str) < 500:  # Reasonable length
+                        return json_str
+                    else:
+                        return '[Complex JSON response - check server logs]'
+        except (ValueError, TypeError, AttributeError):
+            # JSON parsing failed, try text
+            pass
+        
+        # Fall back to text content
+        try:
+            if hasattr(response, 'text'):
+                text_content = response.text
+                if text_content and len(text_content) < 1000:  # Limit length for logging
+                    return text_content
+        except Exception:
+            pass
+            
+        return '[Could not extract response content]'
 
 
 # ---------------------------------------------------------------------------
