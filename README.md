@@ -36,7 +36,7 @@ docker pull chistokhinsv/vaultwarden-ldap-sync:latest
 | `VW_URL` | `http://localhost:8080` | VaultWarden base URL. |
 | `VW_USER_CLIENT_ID` | — | `user.`-scoped OAuth client id. |
 | `VW_USER_CLIENT_SECRET` | — | OAuth client secret for above id. |
-| `VW_ORG_ID` | — | Organisation UUID or `organization.<uuid>`. |
+| `VW_ORG_ID` | — | Organisation UUID or `organization.<uuid>`. If not specified and user filters are provided, auto-discovery mode will sync to all manageable organizations. |
 | `IGNORE_VW_CERT` | `false` | Ignore invalid HTTPS cert. |
 | **LDAP** |||
 | `LDAP_HOST` | `ldap://localhost:389` | LDAP/LDAPS host URI. |
@@ -69,6 +69,52 @@ This approach guarantees that Vaultwarden access is always consistent with the a
 | `PREVENT_SELF_LOCK` | `true` | Never revoke the account whose client id/secret is used for sync. |
 
 Boolean variables understand any of `1`, `true`, `yes`, `on` (case-insensitive) as **true**.
+
+## Sync Modes
+
+VaultWarden-LDAP-Sync supports three different synchronization modes:
+
+### 1. Single Organization Mode
+Specify `VW_ORG_ID` to sync to a specific VaultWarden organization:
+```bash
+VW_ORG_ID=2822e5d3-3a77-4ffb-bc78-d4ac6e6512b0
+LDAP_USER_GROUPS=cn=vaultwarden-users,dc=example,dc=com
+```
+
+### 2. Multi-Organization Mode  
+Use numbered suffixes to sync different LDAP groups to different organizations:
+```bash
+# Base configuration
+VW_ORG_ID=org1-uuid
+VW_USER_CLIENT_ID=client1
+VW_USER_CLIENT_SECRET=secret1
+LDAP_USER_GROUPS=cn=admin-users,dc=example,dc=com
+
+# Additional organization (inherits base config)
+VW_ORG_ID_1=org2-uuid
+LDAP_USER_GROUPS_1=cn=regular-users,dc=example,dc=com
+
+# Organization with different credentials
+VW_ORG_ID_2=org3-uuid
+VW_USER_CLIENT_ID_2=client2
+VW_USER_CLIENT_SECRET_2=secret2
+LDAP_USER_GROUPS_2=cn=external-users,dc=example,dc=com
+```
+
+### 3. Auto-Discovery Mode
+Don't specify `VW_ORG_ID` but provide user filters to automatically sync to **all organizations** the sync user can manage:
+```bash
+# No VW_ORG_ID specified - will discover all manageable organizations
+VW_USER_CLIENT_ID=user.client-id
+VW_USER_CLIENT_SECRET=client-secret
+LDAP_USER_GROUPS=cn=vaultwarden-users,dc=example,dc=com
+```
+
+**Auto-discovery behavior:**
+- Discovers all VaultWarden organizations where the sync user has admin/owner permissions
+- Syncs the specified LDAP users to ALL discovered organizations
+- Useful when you want to grant the same set of users access to multiple organizations
+- Requires that user filters (`LDAP_USER_GROUPS` or `LDAP_FILTER`) are specified
 
 ## Example Compose service
 ```yaml

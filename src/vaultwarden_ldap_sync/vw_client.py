@@ -319,6 +319,52 @@ class VaultWardenClient:
             
         return '[Could not extract response content]'
 
+    def list_manageable_organizations(self) -> List[Dict]:
+        """List organizations that the current user can manage.
+        
+        Returns:
+            List[Dict]: List of organization info dicts with id, name, etc.
+        """
+        try:
+            # Get user profile which contains organization memberships
+            response = self._bw.api_request(
+                method="GET",
+                path="/api/accounts/profile"
+            )
+            
+            # Parse response (could be httpx.Response or dict)
+            if hasattr(response, 'json'):
+                profile_data = response.json()
+            elif isinstance(response, dict):
+                profile_data = response
+            else:
+                logger.error(f"Unexpected response type: {type(response)}")
+                return []
+            
+            # Extract organizations from profile
+            organizations = profile_data.get('organizations', [])
+            
+            # Filter for organizations with management permissions
+            manageable_orgs = []
+            for org in organizations:
+                # Check if user has admin/owner permissions (status 2 = Owner, type 0 = User)
+                # In VaultWarden, status 2 indicates owner/admin level access
+                if org.get('status', 0) >= 2:
+                    manageable_orgs.append({
+                        'id': org.get('id'),
+                        'name': org.get('name'),
+                        'status': org.get('status'),
+                        'type': org.get('type', 0),
+                        'enabled': org.get('enabled', True)
+                    })
+            
+            logger.debug(f"Found {len(manageable_orgs)} manageable organizations")
+            return manageable_orgs
+            
+        except Exception as exc:
+            logger.error(f"Failed to list manageable organizations: {exc}")
+            return []
+
 
 # ---------------------------------------------------------------------------
 # Helpers – TLS verification patch
